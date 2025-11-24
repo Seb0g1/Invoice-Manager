@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import {
   Box, Paper, Typography, Button, TextField, Switch, FormControlLabel,
-  Dialog, DialogTitle, DialogContent, DialogActions, CircularProgress,
+  CircularProgress,
   Alert, Divider, Grid, useMediaQuery, ToggleButton, ToggleButtonGroup,
   InputAdornment, IconButton, Checkbox, FormGroup, Accordion, AccordionSummary,
-  AccordionDetails, Chip
+  AccordionDetails
 } from '@mui/material';
 import {
   Settings as SettingsIcon, Send as SendIcon, Visibility as VisibilityIcon,
@@ -62,7 +62,7 @@ const ALL_PAGES = [
 const ALL_ROLES = ['director', 'collector'];
 
 const Settings: React.FC = () => {
-  const { theme, mode, toggleTheme, setTheme } = useThemeContext();
+  const { theme, mode, setTheme } = useThemeContext();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   const [loading, setLoading] = useState(true);
@@ -224,36 +224,18 @@ const Settings: React.FC = () => {
 
       if (response.data.complete) {
         toast.success(`Синхронизация завершена! Синхронизировано товаров: ${response.data.total || 0}`);
-      }
-
-      eventSource.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (data.progress) {
-          setSyncProgress({
-            current: data.progress.current || 0,
-            total: data.progress.total || 0,
-          });
-        }
-        if (data.complete) {
-          eventSource.close();
-          setSyncingOzon(false);
-          setSyncProgress(null);
-          toast.success(`Синхронизация завершена! Синхронизировано товаров: ${data.total || 0}`);
-        }
-        if (data.error) {
-          eventSource.close();
-          setSyncingOzon(false);
-          setSyncProgress(null);
-          toast.error(data.error || 'Ошибка при синхронизации');
-        }
-      };
-
-      eventSource.onerror = () => {
-        eventSource.close();
         setSyncingOzon(false);
         setSyncProgress(null);
-        toast.error('Ошибка при синхронизации');
-      };
+      } else if (response.data.progress) {
+        setSyncProgress({
+          current: response.data.progress.current || 0,
+          total: response.data.progress.total || 0,
+        });
+      } else if (response.data.error) {
+        setSyncingOzon(false);
+        setSyncProgress(null);
+        toast.error(response.data.error || 'Ошибка при синхронизации');
+      }
     } catch (error: any) {
       setSyncingOzon(false);
       setSyncProgress(null);

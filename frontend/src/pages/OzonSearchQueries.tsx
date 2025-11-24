@@ -39,7 +39,7 @@ import { ru } from 'date-fns/locale';
 import { format } from 'date-fns';
 
 const OzonSearchQueries: React.FC = () => {
-  const { theme, mode } = useThemeContext();
+  const { theme } = useThemeContext();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [tab, setTab] = useState(0);
 
@@ -49,7 +49,7 @@ const OzonSearchQueries: React.FC = () => {
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchSortBy, setSearchSortBy] = useState<'SORT_BY_UNSPECIFIED' | 'CLIENT_COUNT' | 'ADD_TO_CART' | 'CONVERSION_TO_CART' | 'AVG_PRICE'>('CLIENT_COUNT');
   const [searchSortDir, setSearchSortDir] = useState<'ASC' | 'DESC'>('DESC');
-  const [searchPage, setSearchPage] = useState(0);
+  const [searchPage] = useState(0);
 
   // Популярные запросы
   const [topQueries, setTopQueries] = useState<any>(null);
@@ -154,7 +154,7 @@ const OzonSearchQueries: React.FC = () => {
         </Typography>
 
         <Paper sx={{ mb: 3 }}>
-          <Tabs value={tab} onChange={(e, newValue) => setTab(newValue)}>
+          <Tabs value={tab} onChange={(_e, newValue) => setTab(newValue)}>
             <Tab label="Поиск по тексту" />
             <Tab label="Популярные запросы" />
             <Tab label="Запросы товаров" />
@@ -324,7 +324,7 @@ const OzonSearchQueries: React.FC = () => {
                       <Pagination
                         count={Math.ceil((topQueries.total || 0) / 50)}
                         page={topPage + 1}
-                        onChange={(e, page) => setTopPage(page - 1)}
+                        onChange={(_e, page) => setTopPage(page - 1)}
                         color="primary"
                       />
                     </Box>

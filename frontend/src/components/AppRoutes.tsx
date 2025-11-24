@@ -27,8 +27,8 @@ const ProtectedRoute: React.FC<{
 }> = ({ path, element, fallback = '/invoices' }) => {
   const { user } = useAuthStore();
   const [hasAccess, setHasAccess] = useState<boolean | null>(null);
-  const [hiddenPages, setHiddenPages] = useState<string[]>([]);
-  const [rolePermissions, setRolePermissions] = useState<{
+  const [_hiddenPages, setHiddenPages] = useState<string[]>([]);
+  const [_rolePermissions, setRolePermissions] = useState<{
     [role: string]: {
       visiblePages: string[];
       accessibleRoutes: string[];

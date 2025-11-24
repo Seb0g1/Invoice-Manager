@@ -33,7 +33,7 @@ import { useThemeContext } from '../contexts/ThemeContext';
 import toast from 'react-hot-toast';
 
 const OzonPrices: React.FC = () => {
-  const { theme, mode } = useThemeContext();
+  const { theme } = useThemeContext();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   const [products, setProducts] = useState<OzonProduct[]>([]);
@@ -43,7 +43,6 @@ const OzonPrices: React.FC = () => {
   const [price, setPrice] = useState<string>('');
   const [oldPrice, setOldPrice] = useState<string>('');
   const [saving, setSaving] = useState(false);
-  const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
     fetchProducts();
@@ -92,40 +91,6 @@ const OzonPrices: React.FC = () => {
       toast.error(error.response?.data?.message || 'Ошибка при обновлении цены');
     } finally {
       setSaving(false);
-    }
-  };
-
-  const handleBulkUpdate = async (selectedProducts: OzonProduct[], newPrice: number, newOldPrice?: number) => {
-    if (selectedProducts.length === 0) {
-      toast.error('Выберите товары для обновления');
-      return;
-    }
-
-    try {
-      setUpdating(true);
-      const prices = selectedProducts.map(product => ({
-        offer_id: product.offerId,
-        price: newPrice.toFixed(2),
-        old_price: newOldPrice ? newOldPrice.toFixed(2) : undefined,
-      }));
-
-      const response = await api.post('/ozon/products/update-prices', { prices });
-      
-      const successCount = response.data.result?.filter((r: any) => r.updated).length || 0;
-      const errorCount = response.data.errors?.length || 0;
-
-      if (successCount > 0) {
-        toast.success(`Обновлено цен: ${successCount}`);
-      }
-      if (errorCount > 0) {
-        toast.error(`Ошибок: ${errorCount}`);
-      }
-
-      fetchProducts();
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Ошибка при обновлении цен');
-    } finally {
-      setUpdating(false);
     }
   };
 

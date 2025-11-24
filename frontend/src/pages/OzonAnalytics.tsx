@@ -3,7 +3,6 @@ import {
   Box,
   Paper,
   Typography,
-  TextField,
   Button,
   Grid,
   Table,
@@ -23,7 +22,6 @@ import {
 } from '@mui/material';
 import {
   Search as SearchIcon,
-  GetApp as GetAppIcon
 } from '@mui/icons-material';
 import api from '../services/api';
 import { useThemeContext } from '../contexts/ThemeContext';
@@ -35,7 +33,7 @@ import { ru } from 'date-fns/locale';
 import { format } from 'date-fns';
 
 const OzonAnalytics: React.FC = () => {
-  const { theme, mode } = useThemeContext();
+  const { theme } = useThemeContext();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   const [loading, setLoading] = useState(false);

@@ -1,5 +1,4 @@
 import React, { useState, useEffect, Fragment } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Paper,
@@ -43,14 +42,11 @@ import { format } from 'date-fns';
 import api from '../services/api';
 import { PickingList, PickingListItem, Supplier, WarehouseItem } from '../types';
 import { useThemeContext } from '../contexts/ThemeContext';
-import { useCurrencyStore } from '../store/currencyStore';
 import DeleteConfirmModal from '../components/DeleteConfirmModal';
 import toast from 'react-hot-toast';
 
 const PickingLists: React.FC = () => {
-  const navigate = useNavigate();
   const { theme, mode } = useThemeContext();
-  const { currency, convertToDisplay, getCurrencySymbol } = useCurrencyStore();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   const [pickingLists, setPickingLists] = useState<PickingList[]>([]);
@@ -313,49 +309,7 @@ const PickingLists: React.FC = () => {
 
   const collectedCount = items.filter(item => item.collected).length;
   const totalCount = items.length;
-  const filteredCollectedCount = filteredItems.filter(item => item.collected).length;
   const filteredTotalCount = filteredItems.length;
-
-  // Группировка по поставщикам
-  const groupedBySupplier = items.reduce((acc, item) => {
-    const supplierId = item.supplier && typeof item.supplier === 'object' 
-      ? item.supplier._id 
-      : item.supplier || 'no-supplier';
-    const supplierName = item.supplier && typeof item.supplier === 'object' 
-      ? item.supplier.name 
-      : 'Без поставщика';
-
-    if (!acc[supplierId]) {
-      acc[supplierId] = {
-        supplier: item.supplier && typeof item.supplier === 'object' ? item.supplier : null,
-        supplierName,
-        items: [],
-        totalAmount: 0,
-        collectedCount: 0,
-        totalCount: 0
-      };
-    }
-
-    acc[supplierId].items.push(item);
-    acc[supplierId].totalAmount += (item.price || 0) * item.quantity;
-    acc[supplierId].totalCount += item.quantity;
-    if (item.collected) {
-      acc[supplierId].collectedCount += item.quantity;
-    }
-
-    return acc;
-  }, {} as Record<string, {
-    supplier: Supplier | null;
-    supplierName: string;
-    items: PickingListItem[];
-    totalAmount: number;
-    collectedCount: number;
-    totalCount: number;
-  }>);
-
-  const supplierGroups = Object.values(groupedBySupplier).sort((a, b) => 
-    a.supplierName.localeCompare(b.supplierName)
-  );
 
   // Пересчет группировки с учетом фильтров
   const filteredGroupedBySupplier = filteredItems.reduce((acc, item) => {
@@ -1121,7 +1075,7 @@ const AddItemDialog: React.FC<AddItemDialogProps> = ({
               );
             }}
             noOptionsText={warehouseSearchTerm ? "Товары не найдены" : "Начните вводить название или артикул"}
-            isOptionEqualTo={(option, value) => option._id === value._id}
+            isOptionEqualToValue={(option, value) => option._id === value._id}
             clearOnEscape
             clearText="Очистить"
             openOnFocus
@@ -1209,7 +1163,7 @@ const AddItemDialog: React.FC<AddItemDialogProps> = ({
               );
             }}
             noOptionsText="Поставщики не найдены"
-            isOptionEqualTo={(option, value) => option._id === value._id}
+            isOptionEqualToValue={(option, value) => option._id === value._id}
             clearOnEscape
             clearText="Очистить"
             openOnFocus
@@ -1343,7 +1297,7 @@ const EditItemDialog: React.FC<EditItemDialogProps> = ({
               );
             }}
             noOptionsText="Поставщики не найдены"
-            isOptionEqualTo={(option, value) => option._id === value._id}
+            isOptionEqualToValue={(option, value) => option._id === value._id}
             clearOnEscape
             clearText="Очистить"
             openOnFocus

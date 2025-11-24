@@ -255,14 +255,19 @@ export const ThemeContextProvider: React.FC<ThemeContextProviderProps> = ({ chil
             textTransform: 'none',
             borderRadius: 12,
             fontWeight: 600,
-            padding: { xs: '14px 24px', sm: '12px 24px' },
-            fontSize: { xs: '0.9375rem', sm: '1rem' },
-            minHeight: { xs: 48, sm: 40 }, // Минимальная высота для touch на мобильных
+            padding: '12px 24px',
+            fontSize: '1rem',
+            minHeight: 40,
             transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
             '&:active': {
               transform: 'scale(0.98)',
             },
-          },
+            '@media (max-width: 600px)': {
+              padding: '14px 24px',
+              fontSize: '0.9375rem',
+              minHeight: 48,
+            },
+          } as any,
           contained: {
             background: mode === 'dark'
               ? 'linear-gradient(135deg, #0A84FF 0%, #5AC8FA 100%)'

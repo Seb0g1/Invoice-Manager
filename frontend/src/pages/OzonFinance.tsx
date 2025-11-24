@@ -3,7 +3,6 @@ import {
   Box,
   Paper,
   Typography,
-  TextField,
   Button,
   Grid,
   Table,
@@ -29,7 +28,7 @@ import { ru } from 'date-fns/locale';
 import { format } from 'date-fns';
 
 const OzonFinance: React.FC = () => {
-  const { theme, mode } = useThemeContext();
+  const { theme } = useThemeContext();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   const [selectedDate, setSelectedDate] = useState<Date | null>(new Date());

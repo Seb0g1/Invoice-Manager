@@ -40,7 +40,7 @@ const Invoices: React.FC = () => {
   const [deleteInvoiceModalOpen, setDeleteInvoiceModalOpen] = useState(false);
   const [invoiceToDelete, setInvoiceToDelete] = useState<Invoice | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const { mode, theme } = useThemeContext();
+  const { theme } = useThemeContext();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   const isDirector = user?.role === 'director';

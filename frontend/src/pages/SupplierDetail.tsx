@@ -32,18 +32,13 @@ import {
   Delete as DeleteIcon,
 } from '@mui/icons-material';
 import {
-  LineChart,
-  Line,
   AreaChart,
   Area,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
-  BarChart,
-  Bar,
 } from 'recharts';
 import { format } from 'date-fns';
 import { ru } from 'date-fns/locale';

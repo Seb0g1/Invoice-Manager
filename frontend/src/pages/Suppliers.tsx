@@ -16,9 +16,6 @@ import {
   IconButton,
   CircularProgress,
   TextField,
-  Card,
-  CardContent,
-  Grid,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -55,7 +52,6 @@ import toast from 'react-hot-toast';
 
 const Suppliers: React.FC = () => {
   const navigate = useNavigate();
-  const { mode } = useThemeContext();
   const { user } = useAuthStore();
   const { currency, convertToDisplay, getCurrencySymbol } = useCurrencyStore();
   const isDirector = user?.role === 'director';

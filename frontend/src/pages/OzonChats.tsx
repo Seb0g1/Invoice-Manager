@@ -57,7 +57,7 @@ interface OzonMessage {
 }
 
 const OzonChats: React.FC = () => {
-  const { theme, mode } = useThemeContext();
+  const { theme } = useThemeContext();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   const [chats, setChats] = useState<OzonChat[]>([]);
@@ -381,21 +381,13 @@ const OzonChats: React.FC = () => {
                         mb: 0.5 
                       }}>
                         <Typography variant="subtitle2" sx={{ fontWeight: 600, fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
-                          {message.user?.name || message.author?.name || 'Пользователь'}
+                          {message.author?.name || 'Пользователь'}
                         </Typography>
                         <Typography variant="caption" color="text.secondary" sx={{ fontSize: { xs: '0.65rem', sm: '0.75rem' } }}>
                           {new Date(message.created_at).toLocaleString('ru-RU')}
                         </Typography>
                       </Box>
-                      {message.data && Array.isArray(message.data) ? (
-                        message.data.map((text: string, idx: number) => (
-                          <Typography key={idx} variant="body2" sx={{ mb: 0.5 }}>
-                            {text}
-                          </Typography>
-                        ))
-                      ) : (
-                        <Typography variant="body2">{message.text || 'Нет текста'}</Typography>
-                      )}
+                      <Typography variant="body2">{message.text || 'Нет текста'}</Typography>
                       {index < messages.length - 1 && <Divider sx={{ mt: 2 }} />}
                     </Box>
                   ))

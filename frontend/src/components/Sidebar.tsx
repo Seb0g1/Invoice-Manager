@@ -10,7 +10,6 @@ import {
   Toolbar,
   Divider,
   Typography,
-  Box,
   Collapse
 } from '@mui/material';
 import {
@@ -41,7 +40,7 @@ const Sidebar: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuthStore();
-  const { mode, theme } = useThemeContext();
+  const { theme } = useThemeContext();
   const [ozonOpen, setOzonOpen] = useState(false);
   const [sidebarEnabled, setSidebarEnabled] = useState(true);
   const [hiddenPages, setHiddenPages] = useState<string[]>([]);

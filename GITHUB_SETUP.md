@@ -77,3 +77,4 @@ git remote add origin git@github.com:ВАШ_USERNAME/david-warehouse.git
    - Убедитесь, что вы авторизованы в Git: `git config --global user.name` и `git config --global user.email`
    - Проверьте права доступа к репозиторию на GitHub
 
+

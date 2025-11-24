@@ -31,7 +31,6 @@ import {
   ExpandMore as ExpandMoreIcon,
   Refresh as RefreshIcon,
   ExpandLess as ExpandLessIcon,
-  Sort as SortIcon
 } from '@mui/icons-material';
 import api from '../services/api';
 import { OzonProduct } from '../types';
@@ -39,10 +38,8 @@ import { useThemeContext } from '../contexts/ThemeContext';
 import toast from 'react-hot-toast';
 
 const Ozon: React.FC = () => {
-  const [products, setProducts] = useState<OzonProduct[]>([]);
   const [allProducts, setAllProducts] = useState<OzonProduct[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [loadingProgress, setLoadingProgress] = useState<{ current: number; total?: number } | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [inStock, setInStock] = useState<string>('all');
@@ -52,8 +49,6 @@ const Ozon: React.FC = () => {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [filtersExpanded, setFiltersExpanded] = useState(false);
-  const [lastId, setLastId] = useState<string | undefined>(undefined);
-  const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(0);
   const [itemsPerPage, setItemsPerPage] = useState(50);
   const { theme, mode } = useThemeContext();
@@ -170,9 +165,9 @@ const Ozon: React.FC = () => {
       setLoadingProgress(null);
       
       if (iterationCount >= maxIterations) {
-        toast.warning(`Загружено ${allProductsData.length} товаров (достигнут лимит загрузки)`);
+        toast.error(`Загружено ${allProductsData.length} товаров (достигнут лимит загрузки)`);
       } else if (consecutiveErrors >= maxConsecutiveErrors) {
-        toast.warning(`Загружено ${allProductsData.length} товаров (остановлено из-за ошибок)`);
+        toast.error(`Загружено ${allProductsData.length} товаров (остановлено из-за ошибок)`);
       } else {
         toast.success(`Загружено товаров: ${allProductsData.length}`);
       }
@@ -380,7 +375,7 @@ const Ozon: React.FC = () => {
           <ToggleButtonGroup
             value={sortOrder}
             exclusive
-            onChange={(e, newOrder) => newOrder && setSortOrder(newOrder)}
+            onChange={(_e, newOrder) => newOrder && setSortOrder(newOrder)}
             size="small"
             sx={{ minHeight: { xs: 44, sm: 'auto' } }}
           >
@@ -660,7 +655,7 @@ const Ozon: React.FC = () => {
               <Pagination
                 count={totalPages}
                 page={page + 1}
-                onChange={(event, value) => setPage(value - 1)}
+                onChange={(_event, value) => setPage(value - 1)}
                 color="primary"
                 size={isMobile ? "small" : "medium"}
                 showFirstButton
