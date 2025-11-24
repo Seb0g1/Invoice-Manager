@@ -19,11 +19,8 @@ api.interceptors.response.use(
       const isLoginRequest = error.config?.url?.includes('/auth/login');
       
       if (!isLoginPage && !isLoginRequest) {
-        // Очищаем состояние пользователя перед перенаправлением
-        const authStore = require('../store/authStore').useAuthStore.getState();
-        if (authStore.user) {
-          authStore.logout().catch(() => {});
-        }
+        // Перенаправление на страницу входа
+        // Состояние пользователя будет очищено при загрузке страницы входа
         window.location.href = '/login';
       }
     } else if (error.response?.status === 403) {
