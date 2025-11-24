@@ -289,9 +289,19 @@ npm start      # Запуск собранного проекта
 
 ```bash
 cd frontend
-npm run dev      # Запуск dev-сервера (http://localhost:5173)
+npm run dev      # Запуск dev-сервера (http://localhost:3000)
 npm run build    # Сборка для production
 npm run preview  # Просмотр production сборки
+```
+
+**Или используйте готовый скрипт:**
+```bash
+# Windows
+start-frontend.bat
+
+# Linux/Mac
+chmod +x start-frontend.sh
+./start-frontend.sh
 ```
 
 ## 🔐 Безопасность
