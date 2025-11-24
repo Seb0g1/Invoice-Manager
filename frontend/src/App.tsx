@@ -27,6 +27,7 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     checkAuth();
+    // Загружаем курс валют (публичный endpoint, не требует авторизации)
     fetchRate();
     // Обновляем курс каждые 5 минут
     const interval = setInterval(fetchRate, 5 * 60 * 1000);

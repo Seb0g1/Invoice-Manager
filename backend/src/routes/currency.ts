@@ -1,11 +1,10 @@
 import express from 'express';
-import { authMiddleware } from '../middleware/auth';
 import { getUSDRate } from '../services/currencyService';
 
 const router = express.Router();
 
-// Получить текущий курс доллара
-router.get('/rate', authMiddleware, async (req, res) => {
+// Получить текущий курс доллара (публичный endpoint)
+router.get('/rate', async (req, res) => {
   try {
     const rate = await getUSDRate();
     res.json({ rate, currency: 'USD', baseCurrency: 'RUB' });
