@@ -13,8 +13,17 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Перенаправление на страницу входа при 401
-      if (window.location.pathname !== '/login') {
+      // Перенаправление на страницу входа при 401, но только если не на странице входа
+      // и не при попытке входа (чтобы избежать циклов)
+      const isLoginPage = window.location.pathname === '/login';
+      const isLoginRequest = error.config?.url?.includes('/auth/login');
+      
+      if (!isLoginPage && !isLoginRequest) {
+        // Очищаем состояние пользователя перед перенаправлением
+        const authStore = require('../store/authStore').useAuthStore.getState();
+        if (authStore.user) {
+          authStore.logout().catch(() => {});
+        }
         window.location.href = '/login';
       }
     } else if (error.response?.status === 403) {
