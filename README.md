@@ -110,9 +110,13 @@ sudo systemctl enable invoice-manager
 sudo systemctl start invoice-manager
 ```
 
-#### 6. Настройка Nginx для frontend
+#### 6. Настройка домена david.sakoo.ru
 
-Создайте файл `/etc/nginx/sites-available/invoice-manager`:
+**Быстрая настройка:** См. `SETUP_DOMAIN.md`
+
+**Подробная инструкция:** См. `NGINX_SETUP.md`
+
+Создайте файл `/etc/nginx/sites-available/david-warehouse`:
 
 ```nginx
 server {
@@ -148,9 +152,20 @@ server {
 Активируйте конфигурацию:
 
 ```bash
-sudo ln -s /etc/nginx/sites-available/invoice-manager /etc/nginx/sites-enabled/
+# Используйте готовую конфигурацию из проекта
+sudo cp nginx-david.sakoo.ru.conf /etc/nginx/sites-available/david-warehouse
+
+# Активируйте
+sudo ln -s /etc/nginx/sites-available/david-warehouse /etc/nginx/sites-enabled/
+
+# Проверьте и перезагрузите
 sudo nginx -t
 sudo systemctl reload nginx
+```
+
+**Важно:** Убедитесь, что в `backend/.env` указан правильный `FRONTEND_URL`:
+```env
+FRONTEND_URL=http://david.sakoo.ru
 ```
 
 ## 📋 Автоматическая установка (скрипт)
