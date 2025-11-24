@@ -36,9 +36,9 @@ fi
 
 echo -e "${YELLOW}Смена пароля для пользователя 'director' на 'CGJ-Ge-90'...${NC}"
 
-# Создаём временный скрипт для смены пароля
-cat > /tmp/change-director-password.js << 'ENDOFSCRIPT'
-require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+# Создаём временный скрипт для смены пароля в директории backend
+cat > "$BACKEND_DIR/change-director-password-temp.js" << 'ENDOFSCRIPT'
+require('dotenv').config();
 const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
 
@@ -111,13 +111,17 @@ async function changePassword() {
 changePassword();
 ENDOFSCRIPT
 
-# Запускаем скрипт из директории backend, чтобы правильно загрузить .env
-node /tmp/change-director-password.js
+# Запускаем скрипт из директории backend, чтобы правильно загрузить .env и node_modules
+cd "$BACKEND_DIR"
+node change-director-password-temp.js
 
 RESULT=$?
 
+# Возвращаемся в корень проекта
+cd "$PROJECT_DIR"
+
 # Удаляем временный файл
-rm -f /tmp/change-director-password.js
+rm -f "$BACKEND_DIR/change-director-password-temp.js"
 
 if [ $RESULT -eq 0 ]; then
     echo ""
