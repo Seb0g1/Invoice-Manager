@@ -38,29 +38,48 @@ echo -e "${YELLOW}Смена пароля для пользователя 'direc
 
 # Создаём временный скрипт для смены пароля
 cat > /tmp/change-director-password.js << 'ENDOFSCRIPT'
-require('dotenv').config();
+require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
 
-// Импортируем модель User
-const UserSchema = new (require('mongoose').Schema)({
-  login: String,
-  password: String,
-  role: String
-}, { collection: 'users' });
-
-const User = mongoose.models.User || mongoose.model('User', UserSchema);
+// Импортируем модель User из собранного кода
+let User;
+try {
+  // Пробуем импортировать из dist
+  const UserModule = require('./dist/models/User');
+  User = UserModule.default || UserModule;
+} catch (e) {
+  // Если не собран, создаём схему вручную
+  const UserSchema = new mongoose.Schema({
+    login: { type: String, required: true, unique: true },
+    password: { type: String, required: true },
+    role: { type: String, enum: ['director', 'collector'], required: true }
+  }, { 
+    collection: 'users',
+    timestamps: true
+  });
+  User = mongoose.models.User || mongoose.model('User', UserSchema);
+}
 
 async function changePassword() {
   try {
+    console.log('Подключение к MongoDB...');
+    console.log('MONGO_URI:', process.env.MONGO_URI ? 'установлен' : 'не установлен');
+    
     await mongoose.connect(process.env.MONGO_URI);
     console.log('✅ Подключено к MongoDB');
     
     const user = await User.findOne({ login: 'director' });
     if (!user) {
       console.error('❌ Пользователь director не найден');
+      console.log('Доступные пользователи:');
+      const allUsers = await User.find({}).select('login role');
+      allUsers.forEach(u => console.log(`  - ${u.login} (${u.role})`));
       process.exit(1);
     }
+    
+    console.log(`Найден пользователь: ${user.login} (${user.role})`);
+    console.log('Хеширование нового пароля...');
     
     const hashedPassword = await bcrypt.hash('CGJ-Ge-90', 10);
     user.password = hashedPassword;
@@ -68,25 +87,37 @@ async function changePassword() {
     
     console.log('✅ Пароль успешно изменён для пользователя director');
     console.log('   Новый пароль: CGJ-Ge-90');
+    
+    // Проверяем, что пароль действительно изменился
+    const testUser = await User.findOne({ login: 'director' });
+    const testMatch = await bcrypt.compare('CGJ-Ge-90', testUser.password);
+    if (testMatch) {
+      console.log('✅ Проверка: новый пароль работает');
+    } else {
+      console.error('❌ Ошибка: новый пароль не работает после сохранения');
+    }
+    
     process.exit(0);
   } catch (error) {
     console.error('❌ Ошибка:', error.message);
+    console.error('Stack:', error.stack);
     process.exit(1);
   } finally {
     await mongoose.disconnect();
+    console.log('Отключено от MongoDB');
   }
 }
 
 changePassword();
 ENDOFSCRIPT
 
-# Запускаем скрипт
+# Запускаем скрипт из директории backend, чтобы правильно загрузить .env
 node /tmp/change-director-password.js
 
 RESULT=$?
 
 # Удаляем временный файл
-rm /tmp/change-director-password.js
+rm -f /tmp/change-director-password.js
 
 if [ $RESULT -eq 0 ]; then
     echo ""

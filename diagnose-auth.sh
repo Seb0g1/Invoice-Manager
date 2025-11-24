@@ -38,14 +38,17 @@ fi
 
 # Проверка 3: Тест входа
 echo -e "${YELLOW}[3/5] Тест входа с новым паролем...${NC}"
-LOGIN_RESPONSE=$(curl -s -X POST http://localhost:5000/api/auth/login \
+LOGIN_RESPONSE=$(curl -s -i -X POST http://localhost:5000/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"login":"director","password":"CGJ-Ge-90"}' \
   -c /tmp/cookies-test.txt \
   -w "\nHTTP_CODE:%{http_code}")
 
 HTTP_CODE=$(echo "$LOGIN_RESPONSE" | grep "HTTP_CODE" | cut -d: -f2)
-BODY=$(echo "$LOGIN_RESPONSE" | grep -v "HTTP_CODE")
+BODY=$(echo "$LOGIN_RESPONSE" | grep -v "HTTP_CODE" | grep -v "^HTTP" | grep -v "^Set-Cookie" | grep -v "^Content" | grep -v "^Date" | grep -v "^Connection" | grep -v "^X-" | tail -1)
+
+# Проверяем Set-Cookie заголовок
+SET_COOKIE=$(echo "$LOGIN_RESPONSE" | grep -i "Set-Cookie" | head -1)
 
 if [ "$HTTP_CODE" = "200" ]; then
     echo -e "${GREEN}✅ Вход успешен с паролем CGJ-Ge-90${NC}"
@@ -75,14 +78,21 @@ fi
 
 # Проверка 4: Cookies
 echo -e "${YELLOW}[4/5] Проверка cookies...${NC}"
+if [ -n "$SET_COOKIE" ]; then
+    echo -e "${GREEN}✅ Set-Cookie заголовок присутствует${NC}"
+    echo "   $SET_COOKIE"
+else
+    echo -e "${YELLOW}⚠️  Set-Cookie заголовок не найден в ответе${NC}"
+fi
+
 if [ -f "/tmp/cookies-test.txt" ]; then
     COOKIE_VALUE=$(grep -i "token" /tmp/cookies-test.txt 2>/dev/null | awk '{print $7}')
     if [ -n "$COOKIE_VALUE" ]; then
-        echo -e "${GREEN}✅ Cookie установлена${NC}"
+        echo -e "${GREEN}✅ Cookie сохранена в файл${NC}"
         echo "   Токен: ${COOKIE_VALUE:0:30}..."
     else
-        echo -e "${RED}❌ Cookie не установлена!${NC}"
-        echo "   Файл cookies:"
+        echo -e "${RED}❌ Cookie не сохранена в файл!${NC}"
+        echo "   Содержимое файла cookies:"
         cat /tmp/cookies-test.txt
     fi
 else
