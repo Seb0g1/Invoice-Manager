@@ -28,7 +28,12 @@ fi
 
 # Сохраняем локальные изменения
 echo -e "${YELLOW}💾 Сохранение локальных изменений...${NC}"
-git stash push -m "Локальные изменения перед обновлением $(date +%Y-%m-%d_%H:%M:%S)"
+if git diff --quiet && git diff --cached --quiet; then
+    echo -e "${GREEN}✅ Нет локальных изменений${NC}"
+else
+    git stash push -m "Локальные изменения перед обновлением $(date +%Y-%m-%d_%H:%M:%S)"
+    echo -e "${GREEN}✅ Локальные изменения сохранены в stash${NC}"
+fi
 
 # Получаем обновления
 echo -e "${YELLOW}📥 Получение обновлений с GitHub...${NC}"
