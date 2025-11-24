@@ -6,20 +6,23 @@ export interface AuthRequest extends Request {
   userRole?: 'director' | 'collector';
 }
 
+// Переменная для отладки (вместо global)
+let authDebugLogged = false;
+
 export const authMiddleware = (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const token = req.cookies.token;
     
     // Логирование для отладки (только первые несколько запросов)
-    if (!global.authDebugLogged) {
+    if (!authDebugLogged) {
       console.log('Auth middleware - cookies:', {
         hasToken: !!token,
         tokenLength: token ? token.length : 0,
         allCookies: Object.keys(req.cookies),
         headers: req.headers.cookie ? 'present' : 'missing'
       });
-      global.authDebugLogged = true;
-      setTimeout(() => { global.authDebugLogged = false; }, 5000);
+      authDebugLogged = true;
+      setTimeout(() => { authDebugLogged = false; }, 5000);
     }
 
     if (!token) {
