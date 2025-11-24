@@ -154,7 +154,7 @@ pm2 logs invoice-backend
 ### Шаг 5: Попробуйте войти
 
 1. Перейдите на http://david.sakoo.ru/login
-2. Введите: `director` / `12345`
+2. Введите: `director` / `CGJ-Ge-90`
 3. Нажмите "Войти"
 
 ### Шаг 6: Проверьте cookies

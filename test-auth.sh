@@ -15,7 +15,7 @@ echo ""
 echo -e "${YELLOW}[1/3] Тест входа...${NC}"
 LOGIN_RESPONSE=$(curl -s -X POST http://localhost:5000/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"login":"director","password":"12345"}' \
+  -d '{"login":"director","password":"CGJ-Ge-90"}' \
   -c /tmp/cookies.txt \
   -w "\nHTTP_CODE:%{http_code}")
 
