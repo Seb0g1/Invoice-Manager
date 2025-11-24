@@ -38,7 +38,7 @@ NODE_ENV=production
 ### Шаг 4: Войдите снова
 
 1. Перейдите на http://david.sakoo.ru/login
-2. Введите: `director` / `12345`
+2. Введите: `director` / `CGJ-Ge-90`
 3. Нажмите "Войти"
 
 ### Шаг 5: Проверьте cookies

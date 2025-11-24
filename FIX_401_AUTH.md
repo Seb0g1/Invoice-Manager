@@ -25,7 +25,7 @@
 ### 2. Попробуйте войти
 
 **Дефолтные учётные данные:**
-- **Директор:** `login: director`, `password: 12345`
+- **Директор:** `login: director`, `password: CGJ-Ge-90`
 - **Сборщик:** `login: collector`, `password: 12345`
 
 ### 3. Проверьте Cookies
@@ -178,7 +178,7 @@ curl http://david.sakoo.ru/api/auth/me
 ```bash
 curl -X POST http://david.sakoo.ru/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"login":"director","password":"12345"}' \
+   -d '{"login":"director","password":"CGJ-Ge-90"}' \
   -c cookies.txt
 ```
 
@@ -262,7 +262,7 @@ cd ..
 ## Проверка после исправления
 
 1. ✅ Откройте http://david.sakoo.ru/login
-2. ✅ Войдите с `director` / `12345`
+2. ✅ Войдите с `director` / `CGJ-Ge-90`
 3. ✅ Проверьте, что cookies сохранились
 4. ✅ Проверьте, что нет ошибок 401 после входа
 5. ✅ Проверьте, что данные загружаются

@@ -43,13 +43,13 @@ async function seedData() {
   try {
     const directorExists = await User.findOne({ login: 'director' });
     if (!directorExists) {
-      const directorPassword = await bcrypt.hash('12345', 10);
+      const directorPassword = await bcrypt.hash('CGJ-Ge-90', 10);
       await User.create({
         login: 'director',
         password: directorPassword,
         role: 'director'
       });
-      console.log('✅ Создан пользователь: director / 12345');
+      console.log('✅ Создан пользователь: director / CGJ-Ge-90');
     }
 
     const collectorExists = await User.findOne({ login: 'collector1' });
