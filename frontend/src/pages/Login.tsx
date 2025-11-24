@@ -41,9 +41,18 @@ const Login: React.FC = () => {
 
     try {
       await loginUser(login, password);
+      
+      // Небольшая задержка для установки cookies
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Проверяем авторизацию после входа
+      await checkAuth();
+      
       const currentUser = useAuthStore.getState().user;
       if (currentUser) {
         navigate(currentUser.role === 'director' ? '/suppliers' : '/invoices');
+      } else {
+        toast.error('Ошибка авторизации. Проверьте cookies в браузере.');
       }
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Ошибка входа');

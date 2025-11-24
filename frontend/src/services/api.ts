@@ -19,9 +19,19 @@ api.interceptors.response.use(
       const isLoginRequest = error.config?.url?.includes('/auth/login');
       
       if (!isLoginPage && !isLoginRequest) {
-        // Перенаправление на страницу входа
-        // Состояние пользователя будет очищено при загрузке страницы входа
-        window.location.href = '/login';
+        // Перенаправление на страницу входа только если это не запрос после входа
+        const isCheckAuthAfterLogin = error.config?.url?.includes('/auth/me') && 
+                                       sessionStorage.getItem('justLoggedIn') === 'true';
+        
+        if (!isCheckAuthAfterLogin) {
+          // Очищаем флаг входа
+          sessionStorage.removeItem('justLoggedIn');
+          // Перенаправление на страницу входа
+          window.location.href = '/login';
+        } else {
+          // Убираем флаг после первой проверки
+          sessionStorage.removeItem('justLoggedIn');
+        }
       }
     } else if (error.response?.status === 403) {
       // Ошибка доступа

@@ -17,6 +17,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   login: async (login: string, password: string) => {
     try {
       const response = await api.post('/auth/login', { login, password });
+      // Устанавливаем флаг, что только что залогинились
+      sessionStorage.setItem('justLoggedIn', 'true');
       set({ user: response.data.user, loading: false });
     } catch (error: any) {
       set({ loading: false });
