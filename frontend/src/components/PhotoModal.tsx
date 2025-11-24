@@ -58,7 +58,7 @@ const PhotoModal: React.FC<PhotoModalProps> = ({ open, onClose, photoUrl }) => {
           }}
         >
           <img
-            src={`http://localhost:5000${photoUrl}`}
+            src={photoUrl}
             alt="Invoice"
             style={{
               maxWidth: '100%',

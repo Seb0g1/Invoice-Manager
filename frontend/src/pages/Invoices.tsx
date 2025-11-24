@@ -236,7 +236,7 @@ const Invoices: React.FC = () => {
                       <TableCell>
                         <Box
                           component="img"
-                          src={`http://localhost:5000${invoice.photoUrl}`}
+                          src={invoice.photoUrl}
                           alt="Invoice"
                           sx={{
                             width: { xs: 60, sm: 80 },
