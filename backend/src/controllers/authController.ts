@@ -28,12 +28,29 @@ export const login = async (req: Request, res: Response) => {
       { expiresIn: '7d' }
     );
 
-    res.cookie('token', token, {
+    // Настройки cookies
+    const cookieOptions: any = {
       httpOnly: true,
       secure: process.env.FRONTEND_URL?.startsWith('https://') || false,
       sameSite: process.env.FRONTEND_URL?.startsWith('https://') ? 'strict' : 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      domain: process.env.COOKIE_DOMAIN || undefined
+      path: '/'
+    };
+    
+    // Устанавливаем domain только если указан явно
+    if (process.env.COOKIE_DOMAIN) {
+      cookieOptions.domain = process.env.COOKIE_DOMAIN;
+    }
+    
+    res.cookie('token', token, cookieOptions);
+    
+    // Логирование для отладки
+    console.log('Cookie установлена:', {
+      httpOnly: cookieOptions.httpOnly,
+      secure: cookieOptions.secure,
+      sameSite: cookieOptions.sameSite,
+      domain: cookieOptions.domain || 'не указан',
+      path: cookieOptions.path
     });
 
     res.json({
