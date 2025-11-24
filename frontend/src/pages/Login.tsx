@@ -43,19 +43,34 @@ const Login: React.FC = () => {
       await loginUser(login, password);
       
       // Небольшая задержка для установки cookies
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, 200));
       
       // Проверяем авторизацию после входа
       await checkAuth();
       
       const currentUser = useAuthStore.getState().user;
       if (currentUser) {
+        toast.success('Успешный вход!');
         navigate(currentUser.role === 'director' ? '/suppliers' : '/invoices');
       } else {
-        toast.error('Ошибка авторизации. Проверьте cookies в браузере.');
+        // Проверяем cookies вручную
+        const cookies = document.cookie;
+        if (!cookies.includes('token')) {
+          toast.error('Cookie не установлена. Проверьте настройки браузера и Nginx.');
+          console.error('Cookies после входа:', cookies || 'нет cookies');
+        } else {
+          toast.error('Ошибка авторизации. Попробуйте обновить страницу.');
+        }
       }
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Ошибка входа');
+      const errorMessage = error.response?.data?.message || 'Ошибка входа';
+      toast.error(errorMessage);
+      
+      // Дополнительная диагностика
+      if (error.response?.status === 401) {
+        console.error('Ошибка входа: неверный логин или пароль');
+        console.error('Используйте: director / CGJ-Ge-90');
+      }
     } finally {
       setLoading(false);
     }
@@ -120,6 +135,7 @@ const Login: React.FC = () => {
               margin="normal"
               required
               autoFocus
+              autoComplete="username"
               InputProps={{
                 style: { textTransform: 'none' }
               }}
@@ -135,6 +151,7 @@ const Login: React.FC = () => {
               onChange={(e) => setPassword(e.target.value)}
               margin="normal"
               required
+              autoComplete="current-password"
               InputProps={{
                 style: { textTransform: 'none' }
               }}
