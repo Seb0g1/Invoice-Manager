@@ -67,18 +67,28 @@ npm run build
 
 **Вариант 1: Использование PM2 (рекомендуется)**
 
+**Быстрая настройка:**
+```bash
+cd /var/www/david-warehouse
+chmod +x setup-pm2.sh
+./setup-pm2.sh
+```
+
+**Или вручную:**
 ```bash
 # Установка PM2
-npm install -g pm2
+sudo npm install -g pm2
 
 # Запуск backend
 cd backend
 pm2 start dist/index.js --name invoice-backend
 
-# Настройка автозапуска
+# Настройка автозапуска (выполните команду, которую покажет PM2)
 pm2 startup
 pm2 save
 ```
+
+**Подробная инструкция:** См. `PM2_SETUP.md`
 
 **Вариант 2: Использование systemd**
 
