@@ -40,7 +40,12 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const response = await api.get('/auth/me');
       set({ user: response.data, loading: false });
-    } catch (error) {
+    } catch (error: any) {
+      // 401 - это нормально, если пользователь не авторизован
+      // Не логируем ошибку, просто очищаем состояние
+      if (error.response?.status !== 401) {
+        console.error('Auth check error:', error);
+      }
       set({ user: null, loading: false });
     }
   }
