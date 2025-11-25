@@ -124,7 +124,9 @@ export const importWarehouseItems = async (req: AuthRequest, res: Response) => {
     const worksheet = workbook.Sheets[sheetName];
     const data: any[] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
-    const newItems = [];
+    // Словарь для группировки по названию (ключ: нормализованное название, значение: {originalName, quantity, article, price})
+    const itemsMap = new Map<string, { originalName: string; quantity: number; article?: string; price: number }>();
+    
     // Пропускаем заголовок (если есть), начинаем с первой строки данных
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
@@ -135,16 +137,41 @@ export const importWarehouseItems = async (req: AuthRequest, res: Response) => {
         const price = row[3] ? parseFloat(row[3]?.toString()) : 0;
 
         if (name && name.length > 0) {
-          const newItem = new WarehouseItem({
-            name,
-            quantity: !isNaN(quantity) && quantity > 0 ? quantity : 0,
-            article: article && article.length > 0 ? article : undefined,
-            price: !isNaN(price) && price > 0 ? price : 0,
-          });
-          newItems.push(newItem);
+          const normalizedName = name.toLowerCase();
+          const existingItem = itemsMap.get(normalizedName);
+          
+          if (existingItem) {
+            // Если товар с таким названием уже есть, суммируем количество
+            existingItem.quantity += (!isNaN(quantity) && quantity > 0 ? quantity : 0);
+            // Обновляем артикул и цену, если они не были заданы ранее
+            if (!existingItem.article && article && article.length > 0) {
+              existingItem.article = article;
+            }
+            if (!existingItem.price && !isNaN(price) && price > 0) {
+              existingItem.price = price;
+            }
+          } else {
+            // Создаем новый элемент
+            itemsMap.set(normalizedName, {
+              originalName: name, // Сохраняем оригинальное название
+              quantity: !isNaN(quantity) && quantity > 0 ? quantity : 0,
+              article: article && article.length > 0 ? article : undefined,
+              price: !isNaN(price) && price > 0 ? price : 0,
+            });
+          }
         }
       }
     }
+
+    // Преобразуем Map в массив для сохранения
+    const newItems = Array.from(itemsMap.values()).map((data) => {
+      return new WarehouseItem({
+        name: data.originalName, // Сохраняем оригинальное название
+        quantity: data.quantity,
+        article: data.article,
+        price: data.price,
+      });
+    });
 
     if (newItems.length === 0) {
       return res.status(400).json({ message: 'Не найдено действительных товаров для импорта' });

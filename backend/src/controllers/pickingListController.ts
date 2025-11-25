@@ -132,7 +132,8 @@ export const importExcel = async (req: AuthRequest, res: Response) => {
     const worksheet = workbook.Sheets[sheetName];
     const data = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
 
-    const items = [];
+    // Словарь для группировки по названию (ключ: нормализованное название, значение: {originalName, quantity, article})
+    const itemsMap = new Map<string, { originalName: string; quantity: number; article?: string }>();
     
     // Пропускаем заголовки (первую строку) и обрабатываем данные
     for (let i = 1; i < data.length; i++) {
@@ -145,15 +146,35 @@ export const importExcel = async (req: AuthRequest, res: Response) => {
 
       if (!name) continue; // Пропускаем строки без наименования
 
-      items.push({
-        pickingList: pickingList._id,
-        name,
-        article,
-        quantity,
-        collected: false,
-        paid: false
-      });
+      const normalizedName = name.toLowerCase();
+      const existingItem = itemsMap.get(normalizedName);
+      
+      if (existingItem) {
+        // Если товар с таким названием уже есть, суммируем количество
+        existingItem.quantity += quantity;
+        // Обновляем артикул, если он не был задан ранее
+        if (!existingItem.article && article) {
+          existingItem.article = article;
+        }
+      } else {
+        // Создаем новый элемент
+        itemsMap.set(normalizedName, {
+          originalName: name, // Сохраняем оригинальное название
+          quantity,
+          article: article || undefined,
+        });
+      }
     }
+
+    // Преобразуем Map в массив для сохранения
+    const items = Array.from(itemsMap.values()).map((data) => ({
+      pickingList: pickingList._id,
+      name: data.originalName, // Сохраняем оригинальное название
+      article: data.article,
+      quantity: data.quantity,
+      collected: false,
+      paid: false
+    }));
 
     if (items.length === 0) {
       return res.status(400).json({ message: 'Не найдено данных для импорта' });

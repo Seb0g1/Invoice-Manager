@@ -160,7 +160,24 @@ const AppContent: React.FC = () => {
                         </IconButton>
                       </Tooltip>
                       
-                      {!isMobile && (
+                      {isMobile ? (
+                        <IconButton
+                          color="inherit"
+                          onClick={handleLogout}
+                          size="medium"
+                          sx={{
+                            color: 'inherit',
+                            '&:hover': {
+                              background: mode === 'dark' 
+                                ? 'rgba(255, 255, 255, 0.1)' 
+                                : 'rgba(0, 0, 0, 0.08)',
+                            },
+                          }}
+                          title="Выход"
+                        >
+                          <LogoutIcon />
+                        </IconButton>
+                      ) : (
                         <>
                           <Typography 
                             variant="body2" 
@@ -176,7 +193,7 @@ const AppContent: React.FC = () => {
                             color="inherit"
                             startIcon={<LogoutIcon />}
                             onClick={handleLogout}
-                            size={isMobile ? "small" : "medium"}
+                            size="medium"
                             sx={{
                               color: 'inherit',
                               '&:hover': {
