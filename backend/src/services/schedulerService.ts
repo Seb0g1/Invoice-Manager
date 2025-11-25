@@ -1,9 +1,9 @@
-import cron from 'node-cron';
+import * as cron from 'node-cron';
 import { YandexBusiness } from '../models/YandexBusiness';
 
 interface ScheduledTask {
   name: string;
-  task: cron.ScheduledTask;
+  task: ReturnType<typeof cron.schedule>;
   enabled: boolean;
 }
 

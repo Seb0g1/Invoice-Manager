@@ -241,18 +241,24 @@ export class YandexMarketApiClient {
 
   /**
    * Очистить кэш для бизнеса (например, после обновления токена)
+   * TODO: Раскомментировать после генерации клиента
    */
   clearCache(businessId: string): void {
-    this.apiInstances.delete(businessId);
-    this.configurations.delete(businessId);
+    // TODO: Раскомментировать после генерации клиента
+    // this.apiInstances.delete(businessId);
+    // this.configurations.delete(businessId);
+    console.warn('clearCache: Сгенерированный клиент еще не создан');
   }
 
   /**
    * Очистить весь кэш
+   * TODO: Раскомментировать после генерации клиента
    */
   clearAllCache(): void {
-    this.apiInstances.clear();
-    this.configurations.clear();
+    // TODO: Раскомментировать после генерации клиента
+    // this.apiInstances.clear();
+    // this.configurations.clear();
+    console.warn('clearAllCache: Сгенерированный клиент еще не создан');
   }
 }
 
