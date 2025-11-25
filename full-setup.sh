@@ -92,7 +92,29 @@ else
     if git remote get-url origin >/dev/null 2>&1; then
         echo -e "${YELLOW}📥 Получение обновлений с GitHub...${NC}"
         git fetch origin
-        git pull origin main || echo -e "${YELLOW}⚠️  Не удалось получить обновления (возможно, есть локальные изменения)${NC}"
+        
+        # Проверка локальных изменений
+        if ! git diff-index --quiet HEAD --; then
+            echo -e "${YELLOW}💾 Обнаружены локальные изменения. Сохраняю в stash...${NC}"
+            git stash push -m "Local changes before update $(date +%Y-%m-%d_%H-%M-%S)" || true
+        fi
+        
+        # Обновление с GitHub
+        if git pull origin main; then
+            echo -e "${GREEN}✅ Проект обновлен${NC}"
+            
+            # Попытка применить сохраненные изменения
+            if git stash list | head -1 | grep -q "Local changes"; then
+                echo -e "${YELLOW}📋 Попытка применить сохраненные изменения...${NC}"
+                if git stash pop 2>/dev/null; then
+                    echo -e "${GREEN}✅ Локальные изменения применены${NC}"
+                else
+                    echo -e "${YELLOW}⚠️  Есть конфликты в сохраненных изменениях. Проверьте: git stash list${NC}"
+                fi
+            fi
+        else
+            echo -e "${RED}❌ Не удалось обновить проект${NC}"
+        fi
     fi
 fi
 
