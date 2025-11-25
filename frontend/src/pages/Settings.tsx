@@ -2,19 +2,19 @@ import React, { useState, useEffect } from 'react';
 import {
   Box, Paper, Typography, Button, TextField, Switch, FormControlLabel,
   CircularProgress,
-  Alert, Divider, Grid, useMediaQuery, ToggleButton, ToggleButtonGroup,
-  InputAdornment, IconButton, Checkbox, FormGroup, Accordion, AccordionSummary,
-  AccordionDetails
+  Alert, Grid, useMediaQuery, ToggleButton, ToggleButtonGroup,
+  InputAdornment, IconButton
 } from '@mui/material';
 import {
   Settings as SettingsIcon, Send as SendIcon, Visibility as VisibilityIcon,
   VisibilityOff as VisibilityOffIcon, DarkMode as DarkModeIcon,
   LightMode as LightModeIcon, AutoMode as AutoModeIcon,
-  Sync as SyncIcon, ExpandMore as ExpandMoreIcon, Menu as MenuIcon,
-  Security as SecurityIcon
+  Sync as SyncIcon, People as PeopleIcon
 } from '@mui/icons-material';
 import api from '../services/api';
 import { useThemeContext } from '../contexts/ThemeContext';
+import { useAuthStore } from '../store/authStore';
+import { useNavigate, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
 interface SettingsData {
@@ -30,40 +30,30 @@ interface SettingsData {
     supplierBalanceChanged?: string;
   };
   telegramEnabled: boolean;
-  sidebarEnabled: boolean;
-  hiddenPages?: string[];
-  rolePermissions?: {
-    [role: string]: {
-      visiblePages: string[];
-      accessibleRoutes: string[];
-    };
-  };
   ozonClientId: string;
   ozonApiKey: string;
   ozonEnabled: boolean;
 }
 
-const ALL_PAGES = [
-  { path: '/invoices', label: 'Накладные' },
-  { path: '/picking-lists', label: 'Лист сборки' },
-  { path: '/warehouse', label: 'Наш склад' },
-  { path: '/yandex', label: 'Yandex Market' },
-  { path: '/suppliers', label: 'Поставщики' },
-  { path: '/users', label: 'Пользователи' },
-  { path: '/settings', label: 'Настройки' },
-  { path: '/ozon/products', label: 'OZON: Список товаров' },
-  { path: '/ozon/prices', label: 'OZON: Обновить цены' },
-  { path: '/ozon/chats', label: 'OZON: Чаты с покупателями' },
-  { path: '/ozon/analytics', label: 'OZON: Аналитика' },
-  { path: '/ozon/search-queries', label: 'OZON: Поисковые запросы' },
-  { path: '/ozon/finance', label: 'OZON: Финансы' },
-];
-
-const ALL_ROLES = ['director', 'collector'];
 
 const Settings: React.FC = () => {
   const { theme, mode, setTheme } = useThemeContext();
+  const { user } = useAuthStore();
+  const navigate = useNavigate();
+  const location = useLocation();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  
+  // Проверяем, что сборщик на странице профиля
+  const isProfilePage = location.pathname === '/settings/profile';
+  
+  // Если сборщик пытается зайти в обычные настройки, перенаправляем
+  useEffect(() => {
+    if (user?.role === 'collector' && !isProfilePage) {
+      navigate('/settings/profile', { replace: true });
+    } else if (user?.role === 'director' && isProfilePage) {
+      navigate('/settings', { replace: true });
+    }
+  }, [user, isProfilePage, navigate]);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -82,9 +72,6 @@ const Settings: React.FC = () => {
     telegramChatId: '',
     telegramTopics: {},
     telegramEnabled: false,
-    sidebarEnabled: true,
-    hiddenPages: [],
-    rolePermissions: {},
     ozonClientId: '',
     ozonApiKey: '',
     ozonEnabled: false,
@@ -104,9 +91,6 @@ const Settings: React.FC = () => {
       
       const settingsData = {
         ...settingsResponse.data,
-        sidebarEnabled: settingsResponse.data.sidebarEnabled !== undefined ? settingsResponse.data.sidebarEnabled : true,
-        hiddenPages: settingsResponse.data.hiddenPages || [],
-        rolePermissions: settingsResponse.data.rolePermissions || {},
         ozonClientId: ozonResponse.data.clientId || '',
         ozonApiKey: ozonResponse.data.apiKey || '',
         ozonEnabled: ozonResponse.data.enabled || false,
@@ -257,6 +241,84 @@ const Settings: React.FC = () => {
     );
   }
 
+  // Если это страница профиля для сборщика, показываем только тему
+  if (isProfilePage && user?.role === 'collector') {
+    return (
+      <Box sx={{ p: { xs: 1.5, sm: 2, md: 3 } }}>
+        <Typography variant="h4" sx={{ mb: 3, fontSize: { xs: '1.5rem', sm: '2rem' } }}>
+          Настройки профиля
+        </Typography>
+        
+        <Grid container spacing={3}>
+          <Grid item xs={12}>
+            <Paper
+              sx={{
+                p: 3,
+                background: mode === 'dark'
+                  ? 'rgba(30, 30, 30, 0.9)'
+                  : 'rgba(255, 255, 255, 0.9)',
+                backdropFilter: 'blur(20px) saturate(180%)',
+                WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+                border: mode === 'dark'
+                  ? '1px solid rgba(255, 255, 255, 0.1)'
+                  : '1px solid rgba(0, 0, 0, 0.1)',
+              }}
+            >
+              <Typography variant="h6" sx={{ mb: 2 }}>
+                Тема оформления
+              </Typography>
+              <Box sx={{ mb: 2 }}>
+                <ToggleButtonGroup
+                  value={settings.theme}
+                  exclusive
+                  onChange={handleThemeChange}
+                  aria-label="theme selection"
+                  fullWidth={isMobile}
+                  size={isMobile ? "large" : "medium"}
+                >
+                  <ToggleButton value="light" aria-label="light">
+                    <LightModeIcon sx={{ mr: 1 }} />
+                    Светлая
+                  </ToggleButton>
+                  <ToggleButton value="dark" aria-label="dark">
+                    <DarkModeIcon sx={{ mr: 1 }} />
+                    Тёмная
+                  </ToggleButton>
+                  <ToggleButton value="auto" aria-label="auto">
+                    <AutoModeIcon sx={{ mr: 1 }} />
+                    Авто
+                  </ToggleButton>
+                </ToggleButtonGroup>
+              </Box>
+            </Paper>
+          </Grid>
+        </Grid>
+
+        <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
+          <Button
+            variant="outlined"
+            onClick={fetchSettings}
+            size={isMobile ? "large" : "medium"}
+            fullWidth={isMobile}
+          >
+            Отмена
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleSave}
+            disabled={saving}
+            startIcon={saving ? <CircularProgress size={20} /> : <SettingsIcon />}
+            size={isMobile ? "large" : "medium"}
+            fullWidth={isMobile}
+          >
+            {saving ? 'Сохранение...' : 'Сохранить'}
+          </Button>
+        </Box>
+      </Box>
+    );
+  }
+
+  // Настройки для директора
   return (
     <Box sx={{ p: { xs: 1.5, sm: 2, md: 3 } }}>
       <Typography variant="h4" sx={{ mb: 3, fontSize: { xs: '1.5rem', sm: '2rem' } }}>
@@ -608,7 +670,7 @@ const Settings: React.FC = () => {
           </Paper>
         </Grid>
 
-        {/* Настройки Sidebar */}
+        {/* Настройки пользователей */}
         <Grid item xs={12}>
           <Paper
             sx={{
@@ -624,278 +686,25 @@ const Settings: React.FC = () => {
             }}
           >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-              <MenuIcon />
+              <PeopleIcon />
               <Typography variant="h6">
-                Боковое меню (Sidebar)
+                Настройки пользователей
               </Typography>
             </Box>
 
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={settings.sidebarEnabled}
-                  onChange={(e) => setSettings({ ...settings, sidebarEnabled: e.target.checked })}
-                />
-              }
-              label="Включить боковое меню"
-            />
-
-            <Alert severity="info" sx={{ mt: 2 }}>
-              При отключении боковое меню будет скрыто на всех устройствах. Навигация будет доступна только через верхнюю панель и мобильное нижнее меню.
-            </Alert>
-          </Paper>
-        </Grid>
-
-        {/* Управление видимостью страниц */}
-        <Grid item xs={12}>
-          <Paper
-            sx={{
-              p: 3,
-              background: mode === 'dark'
-                ? 'rgba(30, 30, 30, 0.9)'
-                : 'rgba(255, 255, 255, 0.9)',
-              backdropFilter: 'blur(20px) saturate(180%)',
-              WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-              border: mode === 'dark'
-                ? '1px solid rgba(255, 255, 255, 0.1)'
-                : '1px solid rgba(0, 0, 0, 0.1)',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-              <MenuIcon />
-              <Typography variant="h6">
-                Управление видимостью страниц
-              </Typography>
-            </Box>
-
-            <Alert severity="info" sx={{ mb: 3 }}>
-              Выберите страницы, которые нужно скрыть от всех пользователей. Скрытые страницы не будут отображаться в меню и будут недоступны для перехода.
+            <Alert severity="info" sx={{ mb: 2 }}>
+              Управление пользователями доступно на странице "Пользователи". 
+              Здесь вы можете создавать, редактировать и удалять пользователей системы.
             </Alert>
 
-            <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 600 }}>
-              Скрыть страницы:
-            </Typography>
-            <FormGroup>
-              {ALL_PAGES.map((page) => (
-                <FormControlLabel
-                  key={page.path}
-                  control={
-                    <Checkbox
-                      checked={settings.hiddenPages?.includes(page.path) || false}
-                      onChange={(e) => {
-                        const currentHidden = settings.hiddenPages || [];
-                        if (e.target.checked) {
-                          if (!currentHidden.includes(page.path)) {
-                            setSettings({
-                              ...settings,
-                              hiddenPages: [...currentHidden, page.path],
-                            });
-                          }
-                        } else {
-                          setSettings({
-                            ...settings,
-                            hiddenPages: currentHidden.filter((p) => p !== page.path),
-                          });
-                        }
-                      }}
-                    />
-                  }
-                  label={page.label}
-                />
-              ))}
-            </FormGroup>
-
-            <Box sx={{ mt: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-              <Button
-                size="small"
-                variant="outlined"
-                onClick={() => {
-                  setSettings({
-                    ...settings,
-                    hiddenPages: ALL_PAGES.map((p) => p.path),
-                  });
-                }}
-              >
-                Скрыть все
-              </Button>
-              <Button
-                size="small"
-                variant="outlined"
-                onClick={() => {
-                  setSettings({
-                    ...settings,
-                    hiddenPages: [],
-                  });
-                }}
-              >
-                Показать все
-              </Button>
-            </Box>
-          </Paper>
-        </Grid>
-
-        {/* Настройки прав ролей */}
-        <Grid item xs={12}>
-          <Paper
-            sx={{
-              p: 3,
-              background: mode === 'dark'
-                ? 'rgba(30, 30, 30, 0.9)'
-                : 'rgba(255, 255, 255, 0.9)',
-              backdropFilter: 'blur(20px) saturate(180%)',
-              WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-              border: mode === 'dark'
-                ? '1px solid rgba(255, 255, 255, 0.1)'
-                : '1px solid rgba(0, 0, 0, 0.1)',
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-              <SecurityIcon />
-              <Typography variant="h6">
-                Права доступа ролей
-              </Typography>
-            </Box>
-
-            <Alert severity="info" sx={{ mb: 3 }}>
-              Настройте видимость страниц и доступ к маршрутам для каждой роли. 
-              <strong>Видимые страницы</strong> - страницы, которые отображаются в меню. 
-              <strong>Доступные маршруты</strong> - маршруты, к которым пользователь может получить доступ напрямую.
-            </Alert>
-
-            {ALL_ROLES.map((role) => {
-              const rolePerms = settings.rolePermissions?.[role] || {
-                visiblePages: [],
-                accessibleRoutes: [],
-              };
-
-              return (
-                <Accordion key={role} sx={{ mb: 2 }}>
-                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                    <Typography variant="h6" sx={{ textTransform: 'capitalize' }}>
-                      {role === 'director' ? 'Директор' : 'Сборщик'}
-                    </Typography>
-                  </AccordionSummary>
-                  <AccordionDetails>
-                    <Box sx={{ mb: 3 }}>
-                      <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 600 }}>
-                        Видимые страницы в меню:
-                      </Typography>
-                      <FormGroup>
-                        {ALL_PAGES.map((page) => (
-                          <FormControlLabel
-                            key={page.path}
-                            control={
-                              <Checkbox
-                                checked={rolePerms.visiblePages.includes(page.path)}
-                                onChange={(e) => {
-                                  const newPerms = { ...rolePerms };
-                                  if (e.target.checked) {
-                                    if (!newPerms.visiblePages.includes(page.path)) {
-                                      newPerms.visiblePages.push(page.path);
-                                    }
-                                  } else {
-                                    newPerms.visiblePages = newPerms.visiblePages.filter(
-                                      (p) => p !== page.path
-                                    );
-                                  }
-                                  setSettings({
-                                    ...settings,
-                                    rolePermissions: {
-                                      ...settings.rolePermissions,
-                                      [role]: newPerms,
-                                    },
-                                  });
-                                }}
-                              />
-                            }
-                            label={page.label}
-                          />
-                        ))}
-                      </FormGroup>
-                    </Box>
-
-                    <Divider sx={{ my: 2 }} />
-
-                    <Box>
-                      <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 600 }}>
-                        Доступные маршруты:
-                      </Typography>
-                      <FormGroup>
-                        {ALL_PAGES.map((page) => (
-                          <FormControlLabel
-                            key={page.path}
-                            control={
-                              <Checkbox
-                                checked={rolePerms.accessibleRoutes.includes(page.path)}
-                                onChange={(e) => {
-                                  const newPerms = { ...rolePerms };
-                                  if (e.target.checked) {
-                                    if (!newPerms.accessibleRoutes.includes(page.path)) {
-                                      newPerms.accessibleRoutes.push(page.path);
-                                    }
-                                  } else {
-                                    newPerms.accessibleRoutes = newPerms.accessibleRoutes.filter(
-                                      (p) => p !== page.path
-                                    );
-                                  }
-                                  setSettings({
-                                    ...settings,
-                                    rolePermissions: {
-                                      ...settings.rolePermissions,
-                                      [role]: newPerms,
-                                    },
-                                  });
-                                }}
-                              />
-                            }
-                            label={page.label}
-                          />
-                        ))}
-                      </FormGroup>
-                    </Box>
-
-                    <Box sx={{ mt: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={() => {
-                          setSettings({
-                            ...settings,
-                            rolePermissions: {
-                              ...settings.rolePermissions,
-                              [role]: {
-                                visiblePages: ALL_PAGES.map((p) => p.path),
-                                accessibleRoutes: ALL_PAGES.map((p) => p.path),
-                              },
-                            },
-                          });
-                        }}
-                      >
-                        Выбрать все
-                      </Button>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={() => {
-                          setSettings({
-                            ...settings,
-                            rolePermissions: {
-                              ...settings.rolePermissions,
-                              [role]: {
-                                visiblePages: [],
-                                accessibleRoutes: [],
-                              },
-                            },
-                          });
-                        }}
-                      >
-                        Снять все
-                      </Button>
-                    </Box>
-                  </AccordionDetails>
-                </Accordion>
-              );
-            })}
+            <Button
+              variant="outlined"
+              onClick={() => navigate('/users')}
+              size={isMobile ? "large" : "medium"}
+              fullWidth={isMobile}
+            >
+              Перейти к управлению пользователями
+            </Button>
           </Paper>
         </Grid>
 

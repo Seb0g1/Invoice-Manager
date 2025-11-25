@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   BottomNavigation,
@@ -7,7 +7,6 @@ import {
 } from '@mui/material';
 import {
   Receipt as ReceiptIcon,
-  People as PeopleIcon,
   Inventory as InventoryIcon,
   Assignment as AssignmentIcon,
   Warehouse as WarehouseIcon,
@@ -17,87 +16,32 @@ import {
 } from '@mui/icons-material';
 import { useAuthStore } from '../store/authStore';
 import { useThemeContext } from '../contexts/ThemeContext';
-import api from '../services/api';
 
 const MobileBottomNav: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuthStore();
   const { mode } = useThemeContext();
-  const [hiddenPages, setHiddenPages] = useState<string[]>([]);
-  const [rolePermissions, setRolePermissions] = useState<{
-    [role: string]: {
-      visiblePages: string[];
-      accessibleRoutes: string[];
-    };
-  }>({});
 
-  // Загружаем настройки
-  useEffect(() => {
-    const fetchSettings = async () => {
-      try {
-        const response = await api.get('/settings');
-        setHiddenPages(response.data.hiddenPages || []);
-        setRolePermissions(response.data.rolePermissions || {});
-      } catch (error) {
-        console.error('Error fetching settings:', error);
-      }
-    };
-    fetchSettings();
-  }, []);
-
-  // Функция для проверки видимости страницы
-  const isPageVisible = (path: string, defaultRoles?: string[]): boolean => {
-    // Временно скрываем страницы OZON и Yandex Market для всех
-    const temporarilyHiddenPages = [
-      '/yandex',
-      '/ozon',
-      '/ozon/products',
-      '/ozon/prices',
-      '/ozon/chats',
-      '/ozon/analytics',
-      '/ozon/search-queries',
-      '/ozon/finance'
-    ];
-    if (temporarilyHiddenPages.includes(path)) {
-      return false;
-    }
-    
-    // Сначала проверяем, не скрыта ли страница глобально
-    if (hiddenPages.includes(path)) {
-      return false;
-    }
-    
+  // Простая функция для проверки видимости страницы по ролям
+  const isPageVisible = (roles?: string[]): boolean => {
     if (!user?.role) return false;
-    
-    // Проверяем настройки прав доступа для конкретной роли
-    const rolePerms = rolePermissions[user.role];
-    
-    // Если настройки заданы для этой роли И массив visiblePages не пустой
-    // Это означает, что настройки были явно сохранены пользователем
-    if (rolePerms && Array.isArray(rolePerms.visiblePages) && rolePerms.visiblePages.length > 0) {
-      // Используем настройки - проверяем, есть ли путь в списке видимых страниц
-      return rolePerms.visiblePages.includes(path);
-    }
-    
-    // Если настройки не заданы или массив пустой, используем старую логику (проверка ролей по умолчанию)
-    if (defaultRoles) {
-      return defaultRoles.includes(user.role);
-    }
-    
-    return true;
+    if (!roles) return true;
+    return roles.includes(user.role);
   };
 
   const getCurrentValue = () => {
+    if (location.pathname.startsWith('/suppliers')) return '/suppliers';
     if (location.pathname.startsWith('/invoices')) return '/invoices';
     if (location.pathname.startsWith('/picking-lists')) return '/picking-lists';
     if (location.pathname.startsWith('/warehouse')) return '/warehouse';
-    if (location.pathname.startsWith('/ozon')) return '/ozon';
     if (location.pathname.startsWith('/yandex')) return '/yandex';
-    if (location.pathname.startsWith('/suppliers')) return '/suppliers';
-    if (location.pathname.startsWith('/users')) return '/users';
-    if (location.pathname.startsWith('/settings')) return '/settings';
-    return '/invoices';
+    if (location.pathname.startsWith('/ozon')) return '/ozon/products';
+    if (location.pathname.startsWith('/settings')) {
+      if (user?.role === 'collector') return '/settings/profile';
+      return '/settings';
+    }
+    return '/suppliers';
   };
 
   return (
@@ -149,60 +93,60 @@ const MobileBottomNav: React.FC = () => {
           },
         }}
       >
-        {isPageVisible('/invoices', ['director', 'collector']) && (
-          <BottomNavigationAction
-            label="Накладные"
-            icon={<ReceiptIcon />}
-            value="/invoices"
-          />
-        )}
-        {isPageVisible('/picking-lists', ['director', 'collector']) && (
-          <BottomNavigationAction
-            label="Сборка"
-            icon={<AssignmentIcon />}
-            value="/picking-lists"
-          />
-        )}
-        {isPageVisible('/warehouse', ['director', 'collector']) && (
-          <BottomNavigationAction
-            label="Склад"
-            icon={<WarehouseIcon />}
-            value="/warehouse"
-          />
-        )}
-        {isPageVisible('/ozon/products', ['director']) && (
-          <BottomNavigationAction
-            label="OZON"
-            icon={<ShoppingCartIcon />}
-            value="/ozon"
-          />
-        )}
-        {isPageVisible('/yandex', ['director']) && (
-          <BottomNavigationAction
-            label="Yandex"
-            icon={<StoreIcon />}
-            value="/yandex"
-          />
-        )}
-        {isPageVisible('/suppliers', ['director', 'collector']) && (
+        {isPageVisible(['director', 'collector']) && (
           <BottomNavigationAction
             label="Поставщики"
             icon={<InventoryIcon />}
             value="/suppliers"
           />
         )}
-        {isPageVisible('/users', ['director']) && (
+        {isPageVisible(['director', 'collector']) && (
           <BottomNavigationAction
-            label="Пользователи"
-            icon={<PeopleIcon />}
-            value="/users"
+            label="Накладные"
+            icon={<ReceiptIcon />}
+            value="/invoices"
           />
         )}
-        {isPageVisible('/settings', ['director']) && (
+        {isPageVisible(['director', 'collector']) && (
+          <BottomNavigationAction
+            label="Сборка"
+            icon={<AssignmentIcon />}
+            value="/picking-lists"
+          />
+        )}
+        {isPageVisible(['director', 'collector']) && (
+          <BottomNavigationAction
+            label="Склад"
+            icon={<WarehouseIcon />}
+            value="/warehouse"
+          />
+        )}
+        {isPageVisible(['director']) && (
+          <BottomNavigationAction
+            label="Yandex"
+            icon={<StoreIcon />}
+            value="/yandex"
+          />
+        )}
+        {isPageVisible(['director']) && (
+          <BottomNavigationAction
+            label="OZON"
+            icon={<ShoppingCartIcon />}
+            value="/ozon/products"
+          />
+        )}
+        {isPageVisible(['director']) && (
           <BottomNavigationAction
             label="Настройки"
             icon={<SettingsIcon />}
             value="/settings"
+          />
+        )}
+        {isPageVisible(['collector']) && (
+          <BottomNavigationAction
+            label="Профиль"
+            icon={<SettingsIcon />}
+            value="/settings/profile"
           />
         )}
       </BottomNavigation>

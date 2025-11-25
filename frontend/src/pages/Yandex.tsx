@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Box,
   Paper,
@@ -32,6 +33,7 @@ import { useThemeContext } from '../contexts/ThemeContext';
 import toast from 'react-hot-toast';
 
 const Yandex: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState<YandexProduct[]>([]);
   const [accounts, setAccounts] = useState<YandexAccount[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string>('');
@@ -48,10 +50,19 @@ const Yandex: React.FC = () => {
     fetchAccounts();
   }, []);
 
+  // Синхронизируем selectedAccountId с URL параметрами
   useEffect(() => {
-    if (selectedAccountId) {
-      fetchProducts();
+    const accountIdFromUrl = searchParams.get('accountId');
+    if (accountIdFromUrl) {
+      setSelectedAccountId(accountIdFromUrl);
+    } else if (accounts.length > 0 && !selectedAccountId) {
+      // Если нет accountId в URL и нет выбранного аккаунта, показываем все товары
+      setSelectedAccountId('');
     }
+  }, [searchParams, accounts]);
+
+  useEffect(() => {
+    fetchProducts();
   }, [selectedAccountId, page]);
 
   const fetchAccounts = async () => {
@@ -69,10 +80,34 @@ const Yandex: React.FC = () => {
   };
 
   const fetchProducts = async () => {
-    if (!selectedAccountId) return;
-
     try {
       setLoading(true);
+      
+      // Если не выбран аккаунт, получаем товары со всех аккаунтов
+      if (!selectedAccountId) {
+        const allProducts: YandexProduct[] = [];
+        for (const account of accounts.filter(a => a.enabled)) {
+          try {
+            const params: any = {
+              accountId: account._id,
+              page: 1,
+              pageSize: 1000, // Большой лимит для получения всех товаров
+            };
+            if (account.businessId) {
+              params.businessId = account.businessId;
+            }
+            const response = await api.get('/yandex/products', { params });
+            allProducts.push(...response.data.products);
+          } catch (error) {
+            console.error(`Ошибка загрузки товаров для аккаунта ${account.name}:`, error);
+          }
+        }
+        setProducts(allProducts);
+        setHasMore(false);
+        return;
+      }
+
+      // Загружаем товары конкретного аккаунта
       const account = accounts.find(a => a._id === selectedAccountId);
       if (!account) return;
 
@@ -103,8 +138,39 @@ const Yandex: React.FC = () => {
   };
 
   const handleSync = async () => {
+    // Если не выбран аккаунт, синхронизируем все аккаунты
     if (!selectedAccountId) {
-      toast.error('Выберите аккаунт');
+      const enabledAccounts = accounts.filter(a => a.enabled);
+      if (enabledAccounts.length === 0) {
+        toast.error('Нет активных аккаунтов для синхронизации');
+        return;
+      }
+      
+      try {
+        setSyncing(true);
+        setSyncProgress({ current: 0, total: enabledAccounts.length });
+        
+        for (let i = 0; i < enabledAccounts.length; i++) {
+          const account = enabledAccounts[i];
+          try {
+            await api.post('/yandex/sync', {
+              accountId: account._id,
+              businessId: account.businessId
+            });
+            setSyncProgress({ current: i + 1, total: enabledAccounts.length });
+          } catch (error: any) {
+            console.error(`Ошибка синхронизации аккаунта ${account.name}:`, error);
+          }
+        }
+        
+        toast.success('Синхронизация всех аккаунтов завершена');
+        await fetchProducts(); // Обновляем список товаров
+      } catch (error: any) {
+        toast.error('Ошибка при синхронизации');
+      } finally {
+        setSyncing(false);
+        setSyncProgress({ current: 0, total: 0 });
+      }
       return;
     }
 
@@ -177,14 +243,22 @@ const Yandex: React.FC = () => {
             <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 200 } }}>
               <InputLabel>Аккаунт</InputLabel>
               <Select
-                value={selectedAccountId}
+                value={selectedAccountId || 'all'}
                 onChange={(e) => {
-                  setSelectedAccountId(e.target.value);
+                  const newAccountId = e.target.value === 'all' ? '' : e.target.value;
+                  setSelectedAccountId(newAccountId);
                   setPage(1);
                   setProducts([]);
+                  // Обновляем URL
+                  if (newAccountId) {
+                    setSearchParams({ accountId: newAccountId });
+                  } else {
+                    setSearchParams({});
+                  }
                 }}
                 label="Аккаунт"
               >
+                <MenuItem value="all">Общие товары (со всех аккаунтов)</MenuItem>
                 {accounts.map((account) => (
                   <MenuItem key={account._id} value={account._id}>
                     {account.name} {account.enabled ? '' : '(отключен)'}
@@ -196,11 +270,14 @@ const Yandex: React.FC = () => {
               variant="outlined"
               startIcon={<SyncIcon />}
               onClick={handleSync}
-              disabled={syncing || !selectedAccountId}
+              disabled={syncing || accounts.filter(a => a.enabled).length === 0}
               size={isMobile ? "medium" : "small"}
               sx={{ minHeight: { xs: 44, sm: 'auto' } }}
             >
-              {syncing ? 'Синхронизация...' : 'Синхронизировать'}
+              {syncing 
+                ? (selectedAccountId ? 'Синхронизация...' : `Синхронизация (${syncProgress.current}/${syncProgress.total})...`)
+                : (selectedAccountId ? 'Синхронизировать' : 'Синхронизировать все аккаунты')
+              }
             </Button>
           </Box>
         </Box>

@@ -14,7 +14,6 @@ import {
 } from '@mui/material';
 import {
   Receipt as ReceiptIcon,
-  People as PeopleIcon,
   Inventory as InventoryIcon,
   Assignment as AssignmentIcon,
   Warehouse as WarehouseIcon,
@@ -24,11 +23,7 @@ import {
   ExpandLess,
   ExpandMore,
   List as ListIcon,
-  Edit as EditIcon,
-  Chat as ChatIcon,
-  Analytics as AnalyticsIcon,
-  Search as SearchIcon,
-  AccountBalance as AccountBalanceIcon
+  Edit as EditIcon
 } from '@mui/icons-material';
 import { useAuthStore } from '../store/authStore';
 import { useThemeContext } from '../contexts/ThemeContext';
@@ -41,81 +36,54 @@ const Sidebar: React.FC = () => {
   const location = useLocation();
   const { user } = useAuthStore();
   const { theme } = useThemeContext();
+  const [yandexOpen, setYandexOpen] = useState(false);
   const [ozonOpen, setOzonOpen] = useState(false);
-  const [sidebarEnabled, setSidebarEnabled] = useState(true);
-  const [hiddenPages, setHiddenPages] = useState<string[]>([]);
-  const [rolePermissions, setRolePermissions] = useState<{
-    [role: string]: {
-      visiblePages: string[];
-      accessibleRoutes: string[];
-    };
-  }>({});
+  const [yandexAccounts, setYandexAccounts] = useState<any[]>([]);
 
-  // Загружаем настройки
+  // Загружаем аккаунты Yandex для подменю
   useEffect(() => {
-    const fetchSettings = async () => {
-      try {
-        const response = await api.get('/settings');
-        setSidebarEnabled(response.data.sidebarEnabled !== undefined ? response.data.sidebarEnabled : true);
-        setHiddenPages(response.data.hiddenPages || []);
-        setRolePermissions(response.data.rolePermissions || {});
-      } catch (error) {
-        // Если ошибка, используем значения по умолчанию
-        console.error('Error fetching settings:', error);
+    const fetchYandexAccounts = async () => {
+      if (user?.role === 'director') {
+        try {
+          const response = await api.get('/yandex/accounts');
+          setYandexAccounts(response.data || []);
+        } catch (error) {
+          console.error('Error fetching Yandex accounts:', error);
+        }
       }
     };
-    fetchSettings();
-  }, []);
+    fetchYandexAccounts();
+  }, [user]);
 
-  // Проверяем, открыта ли категория OZON
+  // Проверяем, открыта ли категория Yandex или OZON
   useEffect(() => {
+    const isYandexPath = location.pathname.startsWith('/yandex');
     const isOzonPath = location.pathname.startsWith('/ozon');
+    setYandexOpen(isYandexPath);
     setOzonOpen(isOzonPath);
   }, [location.pathname]);
 
-  // Функция для проверки видимости страницы
-  const isPageVisible = (path: string, defaultRoles?: string[]): boolean => {
-    // Временно скрываем страницы OZON и Yandex Market для всех
-    const temporarilyHiddenPages = [
-      '/yandex',
-      '/ozon',
-      '/ozon/products',
-      '/ozon/prices',
-      '/ozon/chats',
-      '/ozon/analytics',
-      '/ozon/search-queries',
-      '/ozon/finance'
-    ];
-    if (temporarilyHiddenPages.includes(path)) {
-      return false;
-    }
-    
-    // Сначала проверяем, не скрыта ли страница глобально
-    if (hiddenPages.includes(path)) {
-      return false;
-    }
-    
+  // Простая функция для проверки видимости страницы по ролям
+  const isPageVisible = (roles?: string[]): boolean => {
     if (!user?.role) return false;
-    
-    // Проверяем настройки прав доступа для конкретной роли
-    const rolePerms = rolePermissions[user.role];
-    
-    // Если настройки заданы для этой роли И массив visiblePages не пустой
-    // Это означает, что настройки были явно сохранены пользователем
-    if (rolePerms && Array.isArray(rolePerms.visiblePages) && rolePerms.visiblePages.length > 0) {
-      // Используем настройки - проверяем, есть ли путь в списке видимых страниц
-      return rolePerms.visiblePages.includes(path);
-    }
-    
-    // Если настройки не заданы или массив пустой, используем старую логику (проверка ролей по умолчанию)
-    if (defaultRoles) {
-      return defaultRoles.includes(user.role);
-    }
-    
-    return true;
+    if (!roles) return true;
+    return roles.includes(user.role);
   };
 
-  const allMenuItems = [
+  // Базовые пункты меню
+  const baseMenuItems: Array<{
+    text: string;
+    icon: React.ReactElement;
+    path: string;
+    roles: string[];
+    hasSubmenu?: boolean;
+  }> = [
+    {
+      text: 'Поставщики',
+      icon: <InventoryIcon />,
+      path: '/suppliers',
+      roles: ['director', 'collector']
+    },
     {
       text: 'Накладные',
       icon: <ReceiptIcon />,
@@ -134,23 +102,29 @@ const Sidebar: React.FC = () => {
       path: '/warehouse',
       roles: ['director', 'collector']
     },
+  ];
+
+  // Пункты меню только для директора
+  const directorMenuItems: Array<{
+    text: string;
+    icon: React.ReactElement;
+    path: string;
+    roles: string[];
+    hasSubmenu?: boolean;
+  }> = [
     {
       text: 'Yandex Market',
       icon: <StoreIcon />,
       path: '/yandex',
-      roles: ['director']
+      roles: ['director'],
+      hasSubmenu: true
     },
     {
-      text: 'Поставщики',
-      icon: <InventoryIcon />,
-      path: '/suppliers',
-      roles: ['director', 'collector']
-    },
-    {
-      text: 'Пользователи',
-      icon: <PeopleIcon />,
-      path: '/users',
-      roles: ['director']
+      text: 'OZON',
+      icon: <ShoppingCartIcon />,
+      path: '/ozon',
+      roles: ['director'],
+      hasSubmenu: true
     },
     {
       text: 'Настройки',
@@ -160,63 +134,62 @@ const Sidebar: React.FC = () => {
     }
   ];
 
-  // Фильтруем пункты меню на основе настроек
-  const menuItems = allMenuItems.filter((item) => {
-    if (!user?.role) return false;
-    // Проверяем видимость через настройки, передавая роли по умолчанию
-    return isPageVisible(item.path, item.roles);
-  });
-
-  const allOzonSubItems = [
+  // Пункты меню для сборщика
+  const collectorMenuItems: Array<{
+    text: string;
+    icon: React.ReactElement;
+    path: string;
+    roles: string[];
+    hasSubmenu?: boolean;
+  }> = [
     {
-      text: 'Список товаров',
+      text: 'Настройки профиля',
+      icon: <SettingsIcon />,
+      path: '/settings/profile',
+      roles: ['collector']
+    }
+  ];
+
+  // Фильтруем пункты меню по ролям
+  const menuItems = baseMenuItems.filter((item) => isPageVisible(item.roles));
+  
+  if (user?.role === 'director') {
+    menuItems.push(...directorMenuItems.filter((item) => isPageVisible(item.roles)));
+  } else if (user?.role === 'collector') {
+    menuItems.push(...collectorMenuItems.filter((item) => isPageVisible(item.roles)));
+  }
+
+  // Подменю Yandex
+  const yandexSubItems = [
+    {
+      text: 'Общие товары',
+      icon: <ListIcon />,
+      path: '/yandex',
+      roles: ['director']
+    },
+    ...yandexAccounts.map((account, index) => ({
+      text: account.name || `Аккаунт ${index + 1}`,
+      icon: <StoreIcon />,
+      path: `/yandex?accountId=${account._id}`,
+      roles: ['director'] as string[]
+    }))
+  ];
+
+  // Подменю OZON
+  const ozonSubItems = [
+    {
+      text: 'Общий список товаров',
       icon: <ListIcon />,
       path: '/ozon/products',
       roles: ['director']
     },
     {
-      text: 'Обновить цены',
+      text: 'Изменить цену',
       icon: <EditIcon />,
       path: '/ozon/prices',
       roles: ['director']
-    },
-    {
-      text: 'Чаты с покупателями',
-      icon: <ChatIcon />,
-      path: '/ozon/chats',
-      roles: ['director']
-    },
-    {
-      text: 'Аналитика',
-      icon: <AnalyticsIcon />,
-      path: '/ozon/analytics',
-      roles: ['director']
-    },
-    {
-      text: 'Поисковые запросы',
-      icon: <SearchIcon />,
-      path: '/ozon/search-queries',
-      roles: ['director']
-    },
-    {
-      text: 'Финансы',
-      icon: <AccountBalanceIcon />,
-      path: '/ozon/finance',
-      roles: ['director']
     }
   ];
-
-  // Фильтруем подпункты OZON на основе настроек
-  const ozonSubItems = allOzonSubItems.filter((item) => {
-    if (!user?.role) return false;
-    // Проверяем видимость через настройки, передавая роли по умолчанию
-    return isPageVisible(item.path, item.roles);
-  });
-
-  // Если sidebar отключен, не рендерим его
-  if (!sidebarEnabled) {
-    return null;
-  }
 
   return (
     <Drawer
@@ -249,51 +222,77 @@ const Sidebar: React.FC = () => {
       </Toolbar>
       <Divider />
       <List>
-        {menuItems.map((item) => (
-          <ListItem key={item.text} disablePadding>
-            <ListItemButton
-              selected={location.pathname === item.path}
-              onClick={() => navigate(item.path)}
-            >
-              <ListItemIcon>{item.icon}</ListItemIcon>
-              <ListItemText primary={item.text} />
-            </ListItemButton>
-          </ListItem>
-        ))}
-        
-        {/* Категория OZON с подкатегориями - показываем только если есть доступ хотя бы к одной странице */}
-        {ozonSubItems.length > 0 && (
-          <>
-            <ListItem disablePadding>
+        {menuItems.map((item) => {
+          // Если это Yandex или OZON с подменю
+          if (item.hasSubmenu) {
+            const isYandex = item.path === '/yandex';
+            const subItems = isYandex ? yandexSubItems : ozonSubItems;
+            const isOpen = isYandex ? yandexOpen : ozonOpen;
+            const setIsOpen = isYandex ? setYandexOpen : setOzonOpen;
+
+            return (
+              <React.Fragment key={item.text}>
+                <ListItem disablePadding>
+                  <ListItemButton
+                    onClick={() => setIsOpen(!isOpen)}
+                    selected={location.pathname.startsWith(item.path)}
+                  >
+                    <ListItemIcon>{item.icon}</ListItemIcon>
+                    <ListItemText primary={item.text} />
+                    {isOpen ? <ExpandLess /> : <ExpandMore />}
+                  </ListItemButton>
+                </ListItem>
+                <Collapse in={isOpen} timeout="auto" unmountOnExit>
+                  <List component="div" disablePadding>
+                    {subItems.map((subItem) => {
+                      // Для Yandex проверяем query параметр accountId
+                      let isSelected = false;
+                      if (isYandex) {
+                        if (subItem.path === '/yandex') {
+                          // Общие товары - когда нет accountId в query
+                          isSelected = !location.search.includes('accountId');
+                        } else {
+                          // Конкретный аккаунт - проверяем accountId в query
+                          const accountId = subItem.path.split('accountId=')[1];
+                          isSelected = location.search.includes(`accountId=${accountId}`);
+                        }
+                      } else {
+                        // Для OZON просто проверяем путь
+                        isSelected = location.pathname === subItem.path;
+                      }
+                      
+                      return (
+                        <ListItem key={subItem.text} disablePadding>
+                          <ListItemButton
+                            selected={isSelected}
+                            onClick={() => navigate(subItem.path)}
+                            sx={{ pl: 4 }}
+                          >
+                            <ListItemIcon>{subItem.icon}</ListItemIcon>
+                            <ListItemText primary={subItem.text} />
+                          </ListItemButton>
+                        </ListItem>
+                      );
+                    })}
+                  </List>
+                </Collapse>
+              </React.Fragment>
+            );
+          }
+
+          // Обычный пункт меню
+          return (
+            <ListItem key={item.text} disablePadding>
               <ListItemButton
-                onClick={() => setOzonOpen(!ozonOpen)}
-                selected={location.pathname.startsWith('/ozon')}
+                selected={location.pathname === item.path}
+                onClick={() => navigate(item.path)}
               >
-                <ListItemIcon>
-                  <ShoppingCartIcon />
-                </ListItemIcon>
-                <ListItemText primary="OZON" />
-                {ozonOpen ? <ExpandLess /> : <ExpandMore />}
+                <ListItemIcon>{item.icon}</ListItemIcon>
+                <ListItemText primary={item.text} />
               </ListItemButton>
             </ListItem>
-            <Collapse in={ozonOpen} timeout="auto" unmountOnExit>
-              <List component="div" disablePadding>
-                {ozonSubItems.map((item) => (
-                  <ListItem key={item.text} disablePadding>
-                    <ListItemButton
-                      selected={location.pathname === item.path}
-                      onClick={() => navigate(item.path)}
-                      sx={{ pl: 4 }}
-                    >
-                      <ListItemIcon>{item.icon}</ListItemIcon>
-                      <ListItemText primary={item.text} />
-                    </ListItemButton>
-                  </ListItem>
-                ))}
-              </List>
-            </Collapse>
-          </>
-        )}
+          );
+        })}
       </List>
     </Drawer>
   );
