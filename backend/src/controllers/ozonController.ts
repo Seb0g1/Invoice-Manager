@@ -116,38 +116,145 @@ export const getOzonProducts = async (req: AuthRequest, res: Response) => {
         
         if (pageLimit >= 10000) {
           // Для больших лимитов загружаем все сразу без пагинации
+          // Сортируем: сначала товары с остатками, потом по дате синхронизации, потом по имени
+          // Ограничиваем максимальный размер ответа для предотвращения переполнения памяти
+          const maxLimit = 50000; // Максимальное количество товаров за один запрос
           dbProducts = await OzonProduct.find(query)
-            .sort({ name: 1 })
+            .sort({ hasStock: -1, syncedAt: -1, name: 1 })
+            .limit(Math.min(pageLimit, maxLimit))
             .lean();
-          total = dbProducts.length;
+          total = await OzonProduct.countDocuments(query);
         } else {
           // Для обычной пагинации используем skip/limit
+          // Сортируем: сначала товары с остатками, потом по дате синхронизации, потом по имени
           dbProducts = await OzonProduct.find(query)
-            .sort({ name: 1 })
+            .sort({ hasStock: -1, syncedAt: -1, name: 1 })
             .skip(skip)
             .limit(pageLimit)
             .lean();
           total = await OzonProduct.countDocuments(query);
         }
         
+        // Проверяем статистику остатков в БД
+        const productsWithStock = await OzonProduct.countDocuments({ 'stock.present': { $gt: 0 } });
+        const productsWithHasStock = await OzonProduct.countDocuments({ hasStock: true });
+        const totalProducts = await OzonProduct.countDocuments({});
+        console.log(`[DEBUG] Статистика БД: Всего товаров: ${totalProducts}, С остатками > 0: ${productsWithStock}, С hasStock=true: ${productsWithHasStock}`);
+        
+        // Находим несколько товаров с остатками для проверки
+        const sampleWithStock = await OzonProduct.find({ 'stock.present': { $gt: 0 } })
+          .limit(5)
+          .lean();
+        if (sampleWithStock.length > 0) {
+          console.log(`[DEBUG] Примеры товаров с остатками из БД:`);
+          sampleWithStock.forEach((p: any) => {
+            console.log(`  - ${p.productId} (${p.name}): stock.present = ${p.stock?.present}, stock.reserved = ${p.stock?.reserved}, hasStock = ${p.hasStock}, syncedAt = ${p.syncedAt}`);
+          });
+        } else {
+          // Если нет товаров с остатками, проверяем последние синхронизированные товары
+          const recentProducts = await OzonProduct.find({})
+            .sort({ syncedAt: -1 })
+            .limit(5)
+            .lean();
+          console.log(`[DEBUG] Нет товаров с остатками. Проверяем последние синхронизированные товары:`);
+          recentProducts.forEach((p: any) => {
+            console.log(`  - ${p.productId} (${p.name}): stock = ${JSON.stringify(p.stock)}, hasStock = ${p.hasStock}, syncedAt = ${p.syncedAt}`);
+          });
+        }
+        
+        // Логируем первые 5 товаров из запроса для отладки
+        console.log(`[DEBUG] Первые 5 товаров из запроса (после сортировки):`);
+        dbProducts.slice(0, 5).forEach((p: any) => {
+          console.log(`  - ${p.productId} (${p.name}): hasStock=${p.hasStock}, stock.present=${p.stock?.present}, stock.reserved=${p.stock?.reserved}, syncedAt=${p.syncedAt}`);
+        });
+        
+        // ПРОВЕРКА: Загружаем товары с остатками напрямую из БД
+        const testProductsWithStock = await OzonProduct.find({ 'stock.present': { $gt: 0 } })
+          .limit(5)
+          .lean();
+        console.log(`[DEBUG] ПРОВЕРКА: Товары с остатками > 0 напрямую из БД (${testProductsWithStock.length}):`);
+        testProductsWithStock.forEach((p: any) => {
+          console.log(`  - ${p.productId} (${p.name}): stock=${JSON.stringify(p.stock)}, hasStock=${p.hasStock}, syncedAt=${p.syncedAt}`);
+        });
+        
         // Преобразуем в формат для фронтенда
-        const products = dbProducts.map((p: any) => ({
-          productId: p.productId,
-          offerId: p.offerId,
-          name: p.name,
-          sku: p.sku,
-          price: p.price,
-          oldPrice: p.oldPrice,
-          currency: p.currency,
-          status: p.status,
-          images: p.images,
-          primaryImage: p.primaryImage,
-          stock: p.stock,
-          hasPrice: p.hasPrice,
-          hasStock: p.hasStock,
-          createdAt: p.createdAtOzon || '',
-          updatedAt: p.updatedAtOzon || '',
-        }));
+        const products = dbProducts.map((p: any) => {
+          // Логируем первые несколько товаров для отладки
+          if (dbProducts.indexOf(p) < 3) {
+            console.log(`[DEBUG] Загрузка товара из БД ${p.productId}:`, {
+              name: p.name,
+              price: p.price,
+              stock: p.stock,
+              stockType: typeof p.stock,
+              stockKeys: p.stock ? Object.keys(p.stock) : null,
+              stockPresent: p.stock?.present,
+              stockPresentType: typeof p.stock?.present,
+              hasStock: p.hasStock,
+              primaryImage: p.primaryImage,
+              imagesCount: p.images?.length || 0,
+              syncedAt: p.syncedAt
+            });
+          }
+          
+          // Правильно обрабатываем stock - может быть объектом или вложенными полями
+          let stockData = { coming: 0, present: 0, reserved: 0 };
+          if (p.stock) {
+            if (typeof p.stock === 'object' && !Array.isArray(p.stock)) {
+              // Используем ?? вместо || чтобы не потерять значение 0
+              stockData = {
+                coming: p.stock.coming ?? 0,
+                present: p.stock.present ?? 0,
+                reserved: p.stock.reserved ?? 0,
+              };
+            }
+          }
+          
+          // Логируем для первых товаров, если остатки не загрузились
+          if (dbProducts.indexOf(p) < 3 && stockData.present === 0 && p.hasStock) {
+            console.log(`[DEBUG] ВНИМАНИЕ: Товар ${p.productId} имеет hasStock=true, но stock.present=0:`, {
+              stock: p.stock,
+              stockType: typeof p.stock,
+              hasStock: p.hasStock,
+              stockPresent: p.stock?.present,
+              stockPresentType: typeof p.stock?.present,
+              stockKeys: p.stock ? Object.keys(p.stock) : null,
+              fullStock: JSON.stringify(p.stock)
+            });
+          }
+          
+          // Логируем для первых товаров с остатками
+          if (dbProducts.indexOf(p) < 3 && stockData.present > 0) {
+            console.log(`[DEBUG] Товар ${p.productId} загружен с остатком ${stockData.present}:`, {
+              stock: p.stock,
+              stockData,
+              hasStock: p.hasStock
+            });
+          }
+          
+          // Вычисляем полный остаток (present + reserved)
+          const totalStock = (stockData.present ?? 0) + (stockData.reserved ?? 0);
+          
+          return {
+            productId: p.productId,
+            offerId: p.offerId,
+            name: p.name || '',
+            sku: p.sku,
+            price: p.price || 0,
+            oldPrice: p.oldPrice || null,
+            currency: p.currency || 'RUB',
+            status: p.status || '',
+            images: p.images || [],
+            primaryImage: p.primaryImage || null,
+            stock: {
+              ...stockData,
+              total: totalStock, // Добавляем поле total для удобства
+            },
+            hasPrice: p.hasPrice || false,
+            hasStock: p.hasStock || false,
+            createdAt: p.createdAtOzon || '',
+            updatedAt: p.updatedAtOzon || '',
+          };
+        });
         
         return res.json({
           products,
@@ -157,6 +264,7 @@ export const getOzonProducts = async (req: AuthRequest, res: Response) => {
         });
       } catch (dbError: any) {
         console.error('Error loading from DB, falling back to API:', dbError.message);
+        console.error('DB Error stack:', dbError.stack);
         // Продолжаем загрузку через API
       }
     }
@@ -528,8 +636,16 @@ export const getOzonProducts = async (req: AuthRequest, res: Response) => {
     });
   } catch (error: any) {
     console.error('Get OZON products error:', error);
+    console.error('Error stack:', error.stack);
+    console.error('Error details:', {
+      message: error.message,
+      name: error.name,
+      code: error.code,
+      response: error.response?.data
+    });
     res.status(500).json({ 
-      message: error.message || 'Ошибка при получении товаров OZON' 
+      message: error.message || 'Ошибка при получении товаров OZON',
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 };
@@ -733,193 +849,118 @@ export const sendFileToOzonChat = async (req: AuthRequest, res: Response) => {
   }
 };
 
+// Глобальное хранилище прогресса синхронизации
+let syncProgressState: {
+  current: number;
+  total: number;
+  stage: string;
+  status: 'processing' | 'completed' | 'error';
+  result?: {
+    total: number;
+    synced: number;
+    errors: number;
+    duration: number;
+  };
+  error?: string;
+} | null = null;
+
 export const syncOzonProducts = async (req: AuthRequest, res: Response) => {
   try {
-    const { clientId, apiKey } = req.query;
-
-    if (!clientId || !apiKey) {
-      return res.status(400).json({ message: 'Client ID и API Key обязательны' });
+    // Проверяем, настроен ли OZON API
+    const config = await OzonConfig.findOne();
+    if (!config || !config.enabled || !config.clientId || !config.apiKey) {
+      return res.status(400).json({ message: 'OZON API не настроен. Пожалуйста, настройте API в разделе Настройки' });
     }
 
-    // Создаем временный клиент для синхронизации
-    const syncClient = axios.create({
-      baseURL: 'https://api-seller.ozon.ru',
-      headers: {
-        'Client-Id': (clientId as string).trim(),
-        'Api-Key': (apiKey as string).trim(),
-        'Content-Type': 'application/json',
-      },
-      timeout: 30000,
-    });
+    // Инициализируем сервис
+    await ozonService.initialize();
 
-    let lastId: string | undefined = undefined;
-    let totalSynced = 0;
-    let hasMore = true;
-    let total = 0;
+    // Сбрасываем прогресс
+    syncProgressState = {
+      current: 0,
+      total: 0,
+      stage: 'Инициализация...',
+      status: 'processing',
+    };
 
-    while (hasMore) {
-      try {
-        const response: any = await syncClient.post('/v3/product/list', {
-          filter: {},
-          limit: 1000,
-          ...(lastId && { last_id: lastId }),
-        });
-
-        const items = response.data.result?.items || [];
-        total = response.data.result?.total || total;
-        lastId = response.data.result?.last_id;
-
-        totalSynced += items.length;
-        hasMore = !!lastId && items.length > 0;
-
-        // Получаем остатки для всех товаров через /v4/product/info/stocks
-        if (items.length > 0) {
-          const offerIdList = items
-            .map((item: any) => item.offer_id)
-            .filter((offerId: any) => offerId !== undefined && offerId !== null && offerId !== '');
-          
-          let stocksMap = new Map();
-          if (offerIdList.length > 0) {
-            try {
-              // Используем новый метод /v4/product/info/stocks с фильтром по offer_id
-              // Разбиваем на батчи по 1000 offer_id (лимит API)
-              const batchSize = 1000;
-              const batches: string[][] = [];
-              for (let i = 0; i < offerIdList.length; i += batchSize) {
-                batches.push(offerIdList.slice(i, i + batchSize));
-              }
-              
-              // Получаем остатки параллельно (по 3 батча одновременно для избежания rate limit)
-              const concurrency = 3;
-              for (let i = 0; i < batches.length; i += concurrency) {
-                const batchGroup = batches.slice(i, i + concurrency);
-                const stocksPromises = batchGroup.map(async (batch) => {
-                  try {
-                    const stocksResponse: any = await syncClient.post('/v4/product/info/stocks', {
-                      filter: {
-                        offer_id: batch,
-                      },
-                      limit: 1000,
-                    });
-                    return stocksResponse.data.items || [];
-                  } catch (stockError: any) {
-                    console.error(`Ошибка получения остатков для батча:`, stockError.message);
-                    return [];
-                  }
-                });
-                
-                const stocksResults = await Promise.all(stocksPromises);
-                stocksResults.flat().forEach((stockItem: any) => {
-                  // /v4/product/info/stocks возвращает items с полями: offer_id, product_id, items (массив складов)
-                  const offerKey = stockItem.offer_id?.toString();
-                  const productKey = stockItem.product_id?.toString();
-                  
-                  if (offerKey) {
-                    if (!stocksMap.has(offerKey)) {
-                      stocksMap.set(offerKey, []);
-                    }
-                    // Преобразуем формат данных для совместимости
-                    if (stockItem.items && Array.isArray(stockItem.items)) {
-                      stockItem.items.forEach((warehouseItem: any) => {
-                        stocksMap.get(offerKey)!.push({
-                          ...warehouseItem,
-                          offer_id: offerKey,
-                          product_id: productKey,
-                        });
-                      });
-                    }
-                  }
-                });
-                
-                // Небольшая задержка между группами батчей
-                if (i + concurrency < batches.length) {
-                  await new Promise(resolve => setTimeout(resolve, 200));
-                }
-              }
-            } catch (error: any) {
-              console.error('Ошибка при получении остатков:', error.message);
-            }
-          }
-
-          // Сохраняем товары с остатками в БД
-          const { OzonProduct } = await import('../models/OzonProduct');
-          const productsToSave = items.map((item: any) => {
-            const offerId = item.offer_id?.toString();
-            const stockItems = offerId ? (stocksMap.get(offerId) || []) : [];
-            
-            // Суммируем остатки по всем складам
-            let totalPresent = 0;
-            let totalReserved = 0;
-            if (stockItems.length > 0) {
-              stockItems.forEach((stockItem: any) => {
-                // /v4/product/info/stocks возвращает items с полями: available, reserved
-                const present = typeof stockItem.available === 'number' ? stockItem.available : 
-                               (typeof stockItem.present === 'number' ? stockItem.present : parseInt(stockItem.present) || 0);
-                const reserved = typeof stockItem.reserved === 'number' ? stockItem.reserved : parseInt(stockItem.reserved) || 0;
-                totalPresent += present;
-                totalReserved += reserved;
-              });
-            } else {
-              // Если остатки не получены, используем данные из /v3/product/list
-              totalPresent = item.stocks?.present || 0;
-              totalReserved = item.stocks?.reserved || 0;
-            }
-
-            return {
-              updateOne: {
-                filter: { productId: item.product_id },
-                update: {
-                  $set: {
-                    productId: item.product_id,
-                    offerId: item.offer_id || '',
-                    sku: item.sku || 0,
-                    name: item.name || '',
-                    price: parseFloat(item.price) || 0,
-                    oldPrice: item.old_price ? parseFloat(item.old_price) : null,
-                    currency: item.currency_code || 'RUB',
-                    status: item.status || '',
-                    images: item.images || [],
-                    primaryImage: item.primary_image || null,
-                    stock: {
-                      coming: item.stocks?.coming || 0,
-                      present: totalPresent,
-                      reserved: totalReserved,
-                    },
-                    hasPrice: item.visibility_details?.has_price || false,
-                    hasStock: totalPresent > 0 || item.visibility_details?.has_stock || false,
-                    createdAtOzon: item.created_at || '',
-                    updatedAtOzon: item.updated_at || '',
-                    syncedAt: new Date(),
-                  },
-                },
-                upsert: true,
-              },
-            };
-          });
-
-          await OzonProduct.bulkWrite(productsToSave, { ordered: false });
-        }
-
-        console.log(`Синхронизация OZON: ${totalSynced}/${total}`);
-      } catch (error: any) {
-        console.error('Ошибка при синхронизации товаров OZON:', error.response?.data?.message || error.message);
-        return res.status(500).json({ 
-          message: error.response?.data?.message || error.message || 'Ошибка при синхронизации товаров OZON' 
-        });
-      }
-    }
-
+    // Отправляем ответ сразу, чтобы не блокировать запрос
     res.json({
-      complete: true,
-      total: totalSynced,
+      message: 'Синхронизация запущена',
+      status: 'processing',
     });
+
+    // Запускаем синхронизацию асинхронно
+    ozonService.syncAllProducts((current, total, stage) => {
+      if (syncProgressState) {
+        syncProgressState.current = current;
+        syncProgressState.total = total;
+        syncProgressState.stage = stage;
+      }
+      console.log(`[OZON Sync] ${stage} - ${current}/${total}`);
+    })
+      .then((result) => {
+        if (syncProgressState) {
+          syncProgressState.status = 'completed';
+          syncProgressState.result = result;
+          syncProgressState.current = result.synced;
+          syncProgressState.total = result.total;
+        }
+        console.log(`[OZON Sync] Завершено: ${result.synced}/${result.total} товаров за ${result.duration}с. Ошибок: ${result.errors}`);
+      })
+      .catch((error) => {
+        if (syncProgressState) {
+          syncProgressState.status = 'error';
+          syncProgressState.error = error.message || 'Ошибка синхронизации';
+        }
+        console.error('[OZON Sync] Ошибка синхронизации:', error);
+      });
   } catch (error: any) {
     console.error('Sync OZON products error:', error);
+    if (syncProgressState) {
+      syncProgressState.status = 'error';
+      syncProgressState.error = error.message || 'Ошибка при запуске синхронизации';
+    }
     if (!res.headersSent) {
-      res.status(500).json({ 
-        message: error.message || 'Ошибка при синхронизации товаров OZON' 
+      res.status(500).json({
+        message: error.message || 'Ошибка при запуске синхронизации товаров OZON'
       });
     }
+  }
+};
+
+export const getSyncProgress = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!syncProgressState) {
+      return res.json({
+        status: 'idle',
+        message: 'Синхронизация не запущена',
+      });
+    }
+
+    const response = {
+      status: syncProgressState.status,
+      progress: {
+        current: syncProgressState.current,
+        total: syncProgressState.total,
+        stage: syncProgressState.stage,
+      },
+      result: syncProgressState.result,
+      error: syncProgressState.error,
+    };
+
+    // Очищаем состояние через 5 минут после завершения/ошибки
+    if ((syncProgressState.status === 'completed' || syncProgressState.status === 'error') && syncProgressState.result) {
+      setTimeout(() => {
+        syncProgressState = null;
+      }, 5 * 60 * 1000);
+    }
+
+    res.json(response);
+  } catch (error: any) {
+    console.error('Get sync progress error:', error);
+    res.status(500).json({
+      message: error.message || 'Ошибка при получении прогресса синхронизации'
+    });
   }
 };
 

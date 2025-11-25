@@ -145,7 +145,7 @@ async function syncOzonProducts() {
                 
                 const stocksResults = await Promise.all(stocksPromises);
                 stocksResults.flat().forEach((stockItem: any) => {
-                  // /v4/product/info/stocks возвращает items с полями: offer_id, product_id, items (массив складов)
+                  // /v4/product/info/stocks возвращает items с полями: offer_id, product_id, stocks (массив складов)
                   const offerKey = stockItem.offer_id?.toString();
                   const productKey = stockItem.product_id?.toString();
                   
@@ -153,9 +153,9 @@ async function syncOzonProducts() {
                     if (!stocksMap.has(offerKey)) {
                       stocksMap.set(offerKey, []);
                     }
-                    // Преобразуем формат данных для совместимости
-                    if (stockItem.items && Array.isArray(stockItem.items)) {
-                      stockItem.items.forEach((warehouseItem: any) => {
+                    // Правильная структура: { offer_id, product_id, stocks: [{ present, reserved, ... }] }
+                    if (stockItem.stocks && Array.isArray(stockItem.stocks)) {
+                      stockItem.stocks.forEach((warehouseItem: any) => {
                         stocksMap.get(offerKey)!.push({
                           ...warehouseItem,
                           offer_id: offerKey,
@@ -185,12 +185,18 @@ async function syncOzonProducts() {
             let totalReserved = 0;
             if (stockItems.length > 0) {
               stockItems.forEach((stockItem: any) => {
-                // /v4/product/info/stocks возвращает items с полями: available, reserved
-                const present = typeof stockItem.available === 'number' ? stockItem.available : 
-                               (typeof stockItem.present === 'number' ? stockItem.present : parseInt(stockItem.present) || 0);
-                const reserved = typeof stockItem.reserved === 'number' ? stockItem.reserved : parseInt(stockItem.reserved) || 0;
-                totalPresent += present;
-                totalReserved += reserved;
+                // /v4/product/info/stocks возвращает stocks с полями: present, reserved
+                const present = stockItem.present ?? 0;
+                const reserved = stockItem.reserved ?? 0;
+                const presentNum = typeof present === 'number' ? present : (present !== null && present !== undefined ? parseFloat(String(present)) : 0);
+                const reservedNum = typeof reserved === 'number' ? reserved : (reserved !== null && reserved !== undefined ? parseFloat(String(reserved)) : 0);
+                
+                if (!isNaN(presentNum) && presentNum >= 0) {
+                  totalPresent += presentNum;
+                }
+                if (!isNaN(reservedNum) && reservedNum >= 0) {
+                  totalReserved += reservedNum;
+                }
               });
             } else {
               // Если остатки не получены, используем данные из /v3/product/list
@@ -246,18 +252,27 @@ async function syncOzonProducts() {
   }
 }
 
-// Запускаем автоматическую синхронизацию каждый час
-setInterval(() => {
-  syncOzonProducts();
-}, 60 * 60 * 1000); // 1 час в миллисекундах
+// ОТКЛЮЧЕНО: Старая функция синхронизации заменена на новую через API endpoint /api/ozon/sync
+// Новая функция использует правильную логику обработки остатков из /v4/product/info/stocks
+// setInterval(() => {
+//   syncOzonProducts();
+// }, 60 * 60 * 1000); // 1 час в миллисекундах
 
-// Запускаем синхронизацию при старте сервера (через 5 минут после запуска)
-setTimeout(() => {
-  syncOzonProducts();
-}, 5 * 60 * 1000); // 5 минут
+// setTimeout(() => {
+//   syncOzonProducts();
+// }, 5 * 60 * 1000); // 5 минут
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`🚀 Сервер запущен на порту ${PORT}`);
-  console.log('⏰ Автоматическая синхронизация OZON будет запущена через 5 минут и затем каждый час');
+  console.log('⏰ Автоматическая синхронизация OZON отключена. Используйте ручную синхронизацию через /api/ozon/sync');
+  
+  // Запускаем планировщик задач для Яндекс Маркет
+  try {
+    const { schedulerService } = await import('./services/schedulerService');
+    await schedulerService.initialize();
+    console.log('✅ Планировщик задач Яндекс Маркет запущен');
+  } catch (error: any) {
+    console.error('❌ Ошибка запуска планировщика задач:', error.message);
+  }
 });
 

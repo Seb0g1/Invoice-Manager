@@ -6,6 +6,7 @@ import Supplier from '../models/Supplier';
 import User from '../models/User';
 import telegramService from '../services/telegramService';
 import * as XLSX from 'xlsx';
+import mongoose from 'mongoose';
 
 export const getPickingLists = async (req: AuthRequest, res: Response) => {
   try {
@@ -132,63 +133,169 @@ export const importExcel = async (req: AuthRequest, res: Response) => {
     const worksheet = workbook.Sheets[sheetName];
     const data = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
 
-    // Словарь для группировки по названию (ключ: нормализованное название, значение: {originalName, quantity, article})
-    const itemsMap = new Map<string, { originalName: string; quantity: number; article?: string }>();
+    // Получаем существующие товары для обновления
+    const existingItems = await PickingListItem.find({ pickingList: pickingList._id });
+    const existingItemsMap = new Map<string, typeof existingItems[0]>();
+    existingItems.forEach(item => {
+      const normalizedName = item.name.toLowerCase().trim();
+      existingItemsMap.set(normalizedName, item);
+    });
+
+    // Словарь для группировки по названию (ключ: нормализованное название, значение: {originalName, quantity, price, supplierName})
+    const itemsMap = new Map<string, { 
+      originalName: string; 
+      quantity: number; 
+      price: number;
+      supplierName?: string;
+    }>();
+    
+    let currentSupplier: string | null = null;
     
     // Пропускаем заголовки (первую строку) и обрабатываем данные
     for (let i = 1; i < data.length; i++) {
       const row = data[i] as any[];
       if (!row || row.length === 0) continue;
 
-      const name = String(row[0] || '').trim(); // Столбец A - наименование
-      const article = String(row[1] || '').trim(); // Столбец B - артикул
-      const quantity = parseFloat(String(row[2] || '1')) || 1; // Столбец C - количество
+      const name = String(row[0] || '').trim(); // Столбец A - наименование товара или поставщика
+      const quantity = parseFloat(String(row[1] || '0')) || 0; // Столбец B - количество
+      const price = parseFloat(String(row[2] || '0')) || 0; // Столбец C - цена
+      const supplierName = String(row[3] || '').trim(); // Столбец D - поставщик
 
-      if (!name) continue; // Пропускаем строки без наименования
+      if (!name) continue; // Пропускаем пустые строки
 
-      const normalizedName = name.toLowerCase();
+      // Определяем, является ли строка поставщиком
+      // Поставщик: есть название в A, но нет количества (B) и цены (C), и нет поставщика в D
+      const isSupplier = name && (!quantity || quantity === 0) && (!price || price === 0) && !supplierName;
+      
+      if (isSupplier) {
+        // Это строка с поставщиком - сохраняем для следующих товаров
+        currentSupplier = name;
+        continue;
+      }
+
+      // Это товар - проверяем наличие количества
+      if (!quantity || quantity <= 0) {
+        continue; // Пропускаем товары без количества
+      }
+
+      // Определяем поставщика: приоритет у колонки D, затем у currentSupplier
+      const finalSupplierName = supplierName || currentSupplier || undefined;
+
+      const normalizedName = name.toLowerCase().trim();
       const existingItem = itemsMap.get(normalizedName);
       
       if (existingItem) {
-        // Если товар с таким названием уже есть, суммируем количество
-        existingItem.quantity += quantity;
-        // Обновляем артикул, если он не был задан ранее
-        if (!existingItem.article && article) {
-          existingItem.article = article;
+        // Если товар с таким названием уже есть в файле, обновляем количество (не суммируем)
+        existingItem.quantity = quantity;
+        // Обновляем цену, если она больше 0
+        if (price > 0) {
+          existingItem.price = price;
+        }
+        // Обновляем поставщика, если он указан
+        if (finalSupplierName) {
+          existingItem.supplierName = finalSupplierName;
         }
       } else {
         // Создаем новый элемент
         itemsMap.set(normalizedName, {
-          originalName: name, // Сохраняем оригинальное название
+          originalName: name,
           quantity,
-          article: article || undefined,
+          price: price || 0,
+          supplierName: finalSupplierName,
         });
       }
     }
 
-    // Преобразуем Map в массив для сохранения
-    const items = Array.from(itemsMap.values()).map((data) => ({
-      pickingList: pickingList._id,
-      name: data.originalName, // Сохраняем оригинальное название
-      article: data.article,
-      quantity: data.quantity,
-      collected: false,
-      paid: false
-    }));
-
-    if (items.length === 0) {
+    if (itemsMap.size === 0) {
       return res.status(400).json({ message: 'Не найдено данных для импорта' });
     }
 
-    await PickingListItem.insertMany(items);
+    // Получаем всех поставщиков для поиска по имени
+    const allSuppliers = await Supplier.find({});
+    const suppliersMap = new Map<string, typeof allSuppliers[0]>();
+    allSuppliers.forEach(supplier => {
+      suppliersMap.set(supplier.name.toLowerCase().trim(), supplier);
+    });
+
+    let updatedCount = 0;
+    let createdCount = 0;
+    let suppliersCreatedCount = 0;
+
+    // Обрабатываем товары: обновляем существующие или создаем новые
+    for (const [normalizedName, itemData] of itemsMap.entries()) {
+      const existingItem = existingItemsMap.get(normalizedName);
+      
+      // Находим или создаем поставщика по имени
+      let supplierId: mongoose.Types.ObjectId | undefined = undefined;
+      if (itemData.supplierName) {
+        const supplierNameLower = itemData.supplierName.toLowerCase().trim();
+        let supplier = suppliersMap.get(supplierNameLower);
+        
+        if (!supplier) {
+          // Поставщик не найден - создаем нового
+          try {
+            const newSupplier = new Supplier({
+              name: itemData.supplierName.trim(),
+              balance: 0,
+            });
+            await newSupplier.save();
+            suppliersMap.set(supplierNameLower, newSupplier);
+            supplier = newSupplier;
+            suppliersCreatedCount++;
+            console.log(`[Import] Создан новый поставщик: ${itemData.supplierName}`);
+          } catch (error: any) {
+            console.error(`[Import] Ошибка создания поставщика "${itemData.supplierName}":`, error.message);
+            // Продолжаем без поставщика, если не удалось создать
+          }
+        }
+        
+        if (supplier) {
+          supplierId = supplier._id;
+        }
+      }
+
+      if (existingItem) {
+        // Обновляем существующий товар - суммируем количество при повторном импорте
+        existingItem.quantity += itemData.quantity;
+        // Обновляем цену, если она больше 0
+        if (itemData.price > 0) {
+          existingItem.price = itemData.price;
+        }
+        // Обновляем поставщика, если он указан
+        if (supplierId) {
+          existingItem.supplier = supplierId;
+        }
+        await existingItem.save();
+        updatedCount++;
+      } else {
+        // Создаем новый товар
+        const newItem = new PickingListItem({
+          pickingList: pickingList._id,
+          name: itemData.originalName,
+          quantity: itemData.quantity,
+          price: itemData.price,
+          supplier: supplierId,
+          collected: false,
+          paid: false,
+        });
+        await newItem.save();
+        createdCount++;
+      }
+    }
 
     const populatedItems = await PickingListItem.find({ pickingList: pickingList._id })
       .populate('supplier', 'name')
       .sort({ createdAt: 1 });
 
     res.json({
-      message: `Импортировано ${items.length} элементов`,
-      items: populatedItems
+      message: `Импортировано: создано ${createdCount}, обновлено ${updatedCount} элементов${suppliersCreatedCount > 0 ? `, создано поставщиков: ${suppliersCreatedCount}` : ''}`,
+      items: populatedItems,
+      stats: {
+        created: createdCount,
+        updated: updatedCount,
+        suppliersCreated: suppliersCreatedCount,
+        total: populatedItems.length
+      }
     });
   } catch (error) {
     console.error('Import Excel error:', error);

@@ -8,6 +8,11 @@ import * as pickingListController from '../controllers/pickingListController';
 import * as warehouseController from '../controllers/warehouseController';
 import * as ozonController from '../controllers/ozonController';
 import * as yandexController from '../controllers/yandexController';
+import * as yandexMarketController from '../controllers/yandexMarketController';
+import * as yandexMarketGoController from '../controllers/yandexMarketGoController';
+import * as yandexMarketBulkController from '../controllers/yandexMarketBulkController';
+import * as yandexBusinessController from '../controllers/yandexBusinessController';
+import * as yandexMarketStatsController from '../controllers/yandexMarketStatsController';
 import * as settingsController from '../controllers/settingsController';
 import multer from 'multer';
 import path from 'path';
@@ -122,6 +127,7 @@ router.post('/ozon/products/warehouse-stocks', authMiddleware, ozonController.ge
 router.post('/ozon/products/update-prices', authMiddleware, ozonController.updateOzonPrices);
 router.post('/ozon/products/update-price-timer', authMiddleware, ozonController.updateOzonPriceTimer);
 router.get('/ozon/sync', authMiddleware, roleMiddleware(['director']), ozonController.syncOzonProducts);
+router.get('/ozon/sync/progress', authMiddleware, roleMiddleware(['director']), ozonController.getSyncProgress);
 router.post('/ozon/chats', authMiddleware, ozonController.getOzonChats);
 router.post('/ozon/chats/history', authMiddleware, ozonController.getOzonChatHistory);
 router.post('/ozon/chats/send-message', authMiddleware, ozonController.sendOzonChatMessage);
@@ -144,6 +150,42 @@ router.delete('/yandex/accounts/:id', authMiddleware, roleMiddleware(['director'
 router.post('/yandex/test', authMiddleware, roleMiddleware(['director']), yandexController.testYandexConnection);
 router.get('/yandex/products', authMiddleware, yandexController.getYandexProducts);
 router.post('/yandex/sync', authMiddleware, roleMiddleware(['director']), yandexController.syncYandexProducts);
+
+// Yandex Market Partner API routes (новая система управления товарами)
+// Управление бизнесами
+router.get('/yandex-market/businesses', authMiddleware, roleMiddleware(['director']), yandexBusinessController.getBusinesses);
+router.get('/yandex-market/businesses/:id', authMiddleware, roleMiddleware(['director']), yandexBusinessController.getBusinessById);
+router.post('/yandex-market/businesses', authMiddleware, roleMiddleware(['director']), yandexBusinessController.createBusiness);
+router.put('/yandex-market/businesses/:id', authMiddleware, roleMiddleware(['director']), yandexBusinessController.updateBusiness);
+router.delete('/yandex-market/businesses/:id', authMiddleware, roleMiddleware(['director']), yandexBusinessController.deleteBusiness);
+router.post('/yandex-market/businesses/:id/test', authMiddleware, roleMiddleware(['director']), yandexBusinessController.testBusinessConnection);
+
+// Синхронизация (Market Yandex Go)
+router.post('/yandex-market-go/sync/products', authMiddleware, roleMiddleware(['director']), yandexMarketGoController.syncAllProducts);
+router.post('/yandex-market-go/sync/stocks', authMiddleware, roleMiddleware(['director']), yandexMarketGoController.syncStocks);
+router.post('/yandex-market-go/sync/prices', authMiddleware, roleMiddleware(['director']), yandexMarketGoController.syncPrices);
+
+// Синхронизация (старый API - для совместимости)
+router.post('/yandex-market/sync/products', authMiddleware, roleMiddleware(['director']), yandexMarketController.syncAllProducts);
+router.post('/yandex-market/sync/stocks', authMiddleware, roleMiddleware(['director']), yandexMarketController.syncStocks);
+router.post('/yandex-market/sync/prices', authMiddleware, roleMiddleware(['director']), yandexMarketController.syncPrices);
+
+// Работа с товарами (Market Yandex Go)
+router.get('/yandex-market-go/products', authMiddleware, yandexMarketGoController.getAllProducts);
+router.get('/yandex-market-go/products/search', authMiddleware, yandexMarketGoController.searchProducts);
+router.get('/yandex-market-go/products/:vendorCode', authMiddleware, yandexMarketGoController.getProductByVendorCode);
+router.post('/yandex-market-go/products/update-price', authMiddleware, roleMiddleware(['director']), yandexMarketGoController.updatePriceInAllBusinesses);
+router.post('/yandex-market-go/products/update-name', authMiddleware, roleMiddleware(['director']), yandexMarketGoController.updateProductName);
+
+// Работа с товарами (старый API - для совместимости)
+router.get('/yandex-market/products', authMiddleware, yandexMarketController.getAllProducts);
+router.get('/yandex-market/products/search', authMiddleware, yandexMarketController.searchProducts);
+router.get('/yandex-market/products/:vendorCode', authMiddleware, yandexMarketController.getProductByVendorCode);
+router.post('/yandex-market/products/update-price', authMiddleware, roleMiddleware(['director']), yandexMarketController.updatePriceInAllBusinesses);
+router.post('/yandex-market/products/bulk-update-prices', authMiddleware, roleMiddleware(['director']), yandexMarketBulkController.bulkUpdatePrices);
+
+// Статистика
+router.get('/yandex-market/stats', authMiddleware, yandexMarketStatsController.getStats);
 
 // Settings routes
 router.get('/settings', authMiddleware, settingsController.getSettings); // Чтение доступно всем для проверки прав доступа

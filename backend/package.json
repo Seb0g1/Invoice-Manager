@@ -6,12 +6,16 @@
   "scripts": {
     "dev": "nodemon --exec ts-node src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "sync-ozon": "ts-node scripts/sync-ozon-products.ts",
+    "check-stocks": "ts-node scripts/check-stocks-in-db.ts",
+    "generate-yandex-client": "powershell -ExecutionPolicy Bypass -File scripts/generate-yandex-client.ps1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@types/node-cron": "^3.0.11",
     "axios": "^1.13.2",
     "bcrypt": "^5.1.1",
     "cookie-parser": "^1.4.6",
@@ -22,6 +26,7 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^7.6.3",
     "multer": "^1.4.5-lts.1",
+    "node-cron": "^4.2.1",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
