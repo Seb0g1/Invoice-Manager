@@ -12,7 +12,8 @@ import {
   Assignment as AssignmentIcon,
   Warehouse as WarehouseIcon,
   ShoppingCart as ShoppingCartIcon,
-  Store as StoreIcon
+  Store as StoreIcon,
+  Settings as SettingsIcon
 } from '@mui/icons-material';
 import { useAuthStore } from '../store/authStore';
 import { useThemeContext } from '../contexts/ThemeContext';
@@ -95,6 +96,7 @@ const MobileBottomNav: React.FC = () => {
     if (location.pathname.startsWith('/yandex')) return '/yandex';
     if (location.pathname.startsWith('/suppliers')) return '/suppliers';
     if (location.pathname.startsWith('/users')) return '/users';
+    if (location.pathname.startsWith('/settings')) return '/settings';
     return '/invoices';
   };
 
@@ -122,6 +124,30 @@ const MobileBottomNav: React.FC = () => {
         value={getCurrentValue()}
         onChange={(_, newValue) => navigate(newValue)}
         showLabels
+        sx={{
+          height: { xs: 64, sm: 70 },
+          '& .MuiBottomNavigationAction-root': {
+            minWidth: { xs: 50, sm: 64 },
+            maxWidth: { xs: 80, sm: 120 },
+            padding: { xs: '6px 4px', sm: '6px 8px' },
+            '&.Mui-selected': {
+              paddingTop: { xs: '6px', sm: '6px' },
+            },
+          },
+          '& .MuiBottomNavigationAction-label': {
+            fontSize: { xs: '0.65rem', sm: '0.75rem' },
+            marginTop: { xs: '2px', sm: '4px' },
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            '&.Mui-selected': {
+              fontSize: { xs: '0.65rem', sm: '0.75rem' },
+            },
+          },
+          '& .MuiSvgIcon-root': {
+            fontSize: { xs: '1.4rem', sm: '1.5rem' },
+          },
+        }}
       >
         {isPageVisible('/invoices', ['director', 'collector']) && (
           <BottomNavigationAction
@@ -170,6 +196,13 @@ const MobileBottomNav: React.FC = () => {
             label="Пользователи"
             icon={<PeopleIcon />}
             value="/users"
+          />
+        )}
+        {isPageVisible('/settings', ['director']) && (
+          <BottomNavigationAction
+            label="Настройки"
+            icon={<SettingsIcon />}
+            value="/settings"
           />
         )}
       </BottomNavigation>

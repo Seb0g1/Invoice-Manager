@@ -67,3 +67,4 @@ echo -e "${YELLOW}Cookies должны устанавливаться с:${NC}"
 echo "   secure: false (для HTTP)"
 echo "   sameSite: 'lax' (для HTTP)"
 
+

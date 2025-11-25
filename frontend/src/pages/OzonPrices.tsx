@@ -142,7 +142,15 @@ const OzonPrices: React.FC = () => {
           <CircularProgress />
         </Box>
       ) : (
-        <TableContainer component={Paper}>
+        <TableContainer 
+          component={Paper}
+          sx={{
+            overflowX: 'auto',
+            '& .MuiTable-root': {
+              minWidth: { xs: 400, sm: 600 },
+            }
+          }}
+        >
           <Table size={isMobile ? "small" : "medium"}>
             <TableHead>
               <TableRow>

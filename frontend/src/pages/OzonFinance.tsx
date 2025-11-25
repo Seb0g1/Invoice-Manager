@@ -115,7 +115,15 @@ const OzonFinance: React.FC = () => {
               Отчёт о реализации за {selectedDate && format(selectedDate, 'dd.MM.yyyy')}
             </Typography>
             {realizationData.rows && realizationData.rows.length > 0 ? (
-              <TableContainer>
+              <TableContainer
+                component={Paper}
+                sx={{
+                  overflowX: 'auto',
+                  '& .MuiTable-root': {
+                    minWidth: { xs: 500, sm: 700 },
+                  }
+                }}
+              >
                 <Table size={isMobile ? "small" : "medium"}>
                   <TableHead>
                     <TableRow>

@@ -176,3 +176,4 @@ echo "   sudo systemctl status nginx    - Статус Nginx"
 echo "   sudo tail -f /var/log/nginx/david-warehouse-error.log - Логи Nginx"
 echo ""
 
+

@@ -230,7 +230,15 @@ const OzonAnalytics: React.FC = () => {
               </Typography>
             )}
             {analyticsData.result?.data && analyticsData.result.data.length > 0 ? (
-              <TableContainer>
+              <TableContainer
+                component={Paper}
+                sx={{
+                  overflowX: 'auto',
+                  '& .MuiTable-root': {
+                    minWidth: { xs: 400, sm: 600 },
+                  }
+                }}
+              >
                 <Table size={isMobile ? "small" : "medium"}>
                   <TableHead>
                     <TableRow>

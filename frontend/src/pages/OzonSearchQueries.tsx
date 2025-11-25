@@ -231,7 +231,15 @@ const OzonSearchQueries: React.FC = () => {
                   Всего найдено: {searchResults.total || 0}
                 </Typography>
                 {searchResults.search_queries && searchResults.search_queries.length > 0 ? (
-                  <TableContainer>
+                  <TableContainer
+                    component={Paper}
+                    sx={{
+                      overflowX: 'auto',
+                      '& .MuiTable-root': {
+                        minWidth: { xs: 400, sm: 600 },
+                      }
+                    }}
+                  >
                     <Table size={isMobile ? "small" : "medium"}>
                       <TableHead>
                         <TableRow>
@@ -292,7 +300,15 @@ const OzonSearchQueries: React.FC = () => {
                 </Typography>
                 {topQueries.search_queries && topQueries.search_queries.length > 0 ? (
                   <>
-                    <TableContainer>
+                    <TableContainer
+                      component={Paper}
+                      sx={{
+                        overflowX: 'auto',
+                        '& .MuiTable-root': {
+                          minWidth: { xs: 400, sm: 600 },
+                        }
+                      }}
+                    >
                       <Table size={isMobile ? "small" : "medium"}>
                         <TableHead>
                           <TableRow>
@@ -430,7 +446,15 @@ const OzonSearchQueries: React.FC = () => {
                   Всего запросов: {productQueries.total || 0}
                 </Typography>
                 {productQueries.items && productQueries.items.length > 0 ? (
-                  <TableContainer>
+                  <TableContainer
+                    component={Paper}
+                    sx={{
+                      overflowX: 'auto',
+                      '& .MuiTable-root': {
+                        minWidth: { xs: 500, sm: 700 },
+                      }
+                    }}
+                  >
                     <Table size={isMobile ? "small" : "medium"}>
                       <TableHead>
                         <TableRow>

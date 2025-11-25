@@ -93,3 +93,4 @@ rm /tmp/change-password-temp.js
 echo ""
 echo -e "${GREEN}✅ Готово!${NC}"
 
+

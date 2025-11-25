@@ -78,3 +78,5 @@ git remote add origin git@github.com:ВАШ_USERNAME/david-warehouse.git
    - Проверьте права доступа к репозиторию на GitHub
 
 
+
+

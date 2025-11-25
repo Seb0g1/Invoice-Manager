@@ -249,6 +249,8 @@ const Suppliers: React.FC = () => {
             startIcon={<AddIcon />}
             onClick={() => setCreateDialogOpen(true)}
             size={isMobile ? "large" : "medium"}
+            fullWidth={isMobile}
+            sx={{ minHeight: { xs: 44, sm: 'auto' } }}
           >
             Создать поставщика
           </Button>

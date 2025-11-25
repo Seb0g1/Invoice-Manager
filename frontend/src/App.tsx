@@ -194,9 +194,12 @@ const AppContent: React.FC = () => {
                   </AppBar>
                     <Toolbar />
                     <Box sx={{ 
-                      p: { xs: 1.5, sm: 2, md: 3 },
-                      pb: { xs: 8, md: 3 }, // Отступ снизу для bottom nav на мобильных
-                      flexGrow: 1
+                      p: { xs: 1, sm: 2, md: 3 },
+                      pb: { xs: 10, md: 3 }, // Отступ снизу для bottom nav на мобильных
+                      flexGrow: 1,
+                      width: '100%',
+                      maxWidth: '100%',
+                      overflowX: 'hidden'
                     }}>
                       <AppRoutes />
                     </Box>
