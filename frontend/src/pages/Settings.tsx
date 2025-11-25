@@ -196,7 +196,7 @@ const Settings: React.FC = () => {
   const [testingOzon, setTestingOzon] = useState(false);
   const [syncingOzon, setSyncingOzon] = useState(false);
   const [syncProgress, setSyncProgress] = useState<{ current: number; total: number; stage?: string } | null>(null);
-  const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [showToken, setShowToken] = useState(false);
   const [showOzonApiKey, setShowOzonApiKey] = useState(false);
   const [settings, setSettings] = useState<SettingsData>({

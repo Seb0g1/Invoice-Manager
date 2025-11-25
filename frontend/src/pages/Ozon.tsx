@@ -223,10 +223,6 @@ const Ozon: React.FC = () => {
     // Фильтрация происходит автоматически через filteredProducts
   };
 
-  const handleRefresh = () => {
-    fetchAllProducts(true); // Принудительное обновление через API OZON
-  };
-
   const handleRefreshFromDB = async () => {
     try {
       setLoading(true);

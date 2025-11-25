@@ -11,14 +11,10 @@ import {
   Typography,
   IconButton,
   Box,
-  Collapse,
 } from '@mui/material';
 import {
   Close as CloseIcon,
-  ExpandLess,
-  ExpandMore,
   Store as StoreIcon,
-  ShoppingCart as ShoppingCartIcon,
   List as ListIcon,
   Edit as EditIcon,
   TrendingUp as TrendingUpIcon,

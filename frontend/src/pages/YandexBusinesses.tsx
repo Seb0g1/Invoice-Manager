@@ -64,6 +64,8 @@ const YandexBusinesses: React.FC = () => {
     businessId: '',
     name: '',
     accessToken: '',
+    refreshToken: '',
+    tokenExpiresAt: '',
     enabled: true,
   });
 
@@ -94,6 +96,8 @@ const YandexBusinesses: React.FC = () => {
         businessId: business.businessId,
         name: business.name,
         accessToken: business.accessToken || '',
+        refreshToken: business.refreshToken || '',
+        tokenExpiresAt: business.tokenExpiresAt || '',
         enabled: business.enabled,
       });
     } else {
@@ -102,6 +106,8 @@ const YandexBusinesses: React.FC = () => {
         businessId: '',
         name: '',
         accessToken: '',
+        refreshToken: '',
+        tokenExpiresAt: '',
         enabled: true,
       });
     }
