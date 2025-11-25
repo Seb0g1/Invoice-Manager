@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box, Paper, Typography, Button, TextField, Switch, FormControlLabel,
-  CircularProgress,
+  CircularProgress, LinearProgress,
   Alert, Grid, useMediaQuery, ToggleButton, ToggleButtonGroup,
   InputAdornment, IconButton
 } from '@mui/material';
@@ -55,12 +55,148 @@ const Settings: React.FC = () => {
     }
   }, [user, isProfilePage, navigate]);
 
+  // Проверяем статус синхронизации при загрузке страницы
+  useEffect(() => {
+    const checkSyncStatus = async () => {
+      try {
+        const progressResponse = await api.get('/ozon/sync/progress');
+        
+        if (progressResponse.data.status === 'processing') {
+          // Восстанавливаем состояние синхронизации
+          setSyncingOzon(true);
+          if (progressResponse.data.progress) {
+            setSyncProgress({
+              current: progressResponse.data.progress.current || 0,
+              total: progressResponse.data.progress.total || 0,
+              stage: progressResponse.data.progress.stage || 'Синхронизация...',
+            });
+          }
+          
+          // Запускаем опрос прогресса
+          if (progressIntervalRef.current) {
+            clearInterval(progressIntervalRef.current);
+          }
+          progressIntervalRef.current = setInterval(async () => {
+            try {
+              const currentProgressResponse = await api.get('/ozon/sync/progress');
+              
+              if (currentProgressResponse.data.status === 'completed') {
+                if (progressIntervalRef.current) {
+                  clearInterval(progressIntervalRef.current);
+                  progressIntervalRef.current = null;
+                }
+                const result = currentProgressResponse.data.result;
+                toast.success(`Синхронизация завершена! Синхронизировано товаров: ${result?.synced || 0} из ${result?.total || 0} за ${result?.duration || 0}с`);
+                
+                // Обновляем прогресс для этапа обновления данных
+                setSyncProgress({
+                  current: 0,
+                  total: 0,
+                  stage: 'Обновление списка товаров...',
+                });
+                
+                // Запускаем обновление данных через API
+                try {
+                  let allProductsData: any[] = [];
+                  let currentLastId: string | undefined = undefined;
+                  let hasMoreData = true;
+                  let iterationCount = 0;
+                  const maxIterations = 200;
+                  
+                  while (hasMoreData && iterationCount < maxIterations) {
+                    const params: any = { limit: 100, forceRefresh: 'true' };
+                    if (currentLastId) {
+                      params.lastId = currentLastId;
+                    }
+                    
+                    setSyncProgress({
+                      current: allProductsData.length,
+                      total: result?.total || 0,
+                      stage: `Обновление списка товаров: ${allProductsData.length}...`,
+                    });
+                    
+                    const response = await api.get('/ozon/products', { params });
+                    
+                    if (response.data.products && response.data.products.length > 0) {
+                      allProductsData = [...allProductsData, ...response.data.products];
+                      currentLastId = response.data.lastId;
+                      hasMoreData = !!currentLastId && response.data.products.length >= 100;
+                      iterationCount++;
+                      
+                      setSyncProgress({
+                        current: allProductsData.length,
+                        total: result?.total || allProductsData.length,
+                        stage: `Обновление списка товаров: ${allProductsData.length}...`,
+                      });
+                      
+                      if (hasMoreData) {
+                        await new Promise(resolve => setTimeout(resolve, 300));
+                      }
+                    } else {
+                      hasMoreData = false;
+                    }
+                  }
+                  
+                  toast.success(`Обновлено товаров: ${allProductsData.length}`);
+                } catch (error: any) {
+                  console.error('Ошибка при обновлении списка товаров:', error);
+                  toast.error('Ошибка при обновлении списка товаров');
+                }
+                
+                setSyncingOzon(false);
+                setSyncProgress(null);
+                
+                // Перекидываем на страницу товаров OZON
+                setTimeout(() => {
+                  navigate('/ozon');
+                }, 1000);
+              } else if (currentProgressResponse.data.status === 'error') {
+                if (progressIntervalRef.current) {
+                  clearInterval(progressIntervalRef.current);
+                  progressIntervalRef.current = null;
+                }
+                setSyncingOzon(false);
+                setSyncProgress(null);
+                toast.error(currentProgressResponse.data.error || 'Ошибка при синхронизации');
+              } else if (currentProgressResponse.data.progress) {
+                setSyncProgress({
+                  current: currentProgressResponse.data.progress.current || 0,
+                  total: currentProgressResponse.data.progress.total || 0,
+                  stage: currentProgressResponse.data.progress.stage || 'Синхронизация...',
+                });
+              }
+            } catch (error: any) {
+              console.error('Ошибка при получении прогресса:', error);
+            }
+          }, 2000);
+        }
+      } catch (error: any) {
+        // Игнорируем ошибки при проверке статуса
+        console.log('Синхронизация не запущена или ошибка проверки:', error.message);
+      }
+    };
+    
+    // Проверяем только если пользователь директор и на странице настроек
+    if (user?.role === 'director' && !isProfilePage) {
+      checkSyncStatus();
+    }
+    
+    // Очищаем интервал при размонтировании компонента
+    return () => {
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+        progressIntervalRef.current = null;
+      }
+    };
+  }, [user, isProfilePage, navigate]);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testingTelegram, setTestingTelegram] = useState(false);
   const [testingOzon, setTestingOzon] = useState(false);
   const [syncingOzon, setSyncingOzon] = useState(false);
-  const [syncProgress, setSyncProgress] = useState<{ current: number; total: number } | null>(null);
+  const [syncProgress, setSyncProgress] = useState<{ current: number; total: number; stage?: string } | null>(null);
+  const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [showToken, setShowToken] = useState(false);
   const [showOzonApiKey, setShowOzonApiKey] = useState(false);
   const [settings, setSettings] = useState<SettingsData>({
@@ -197,29 +333,127 @@ const Settings: React.FC = () => {
       setSyncingOzon(true);
       setSyncProgress({ current: 0, total: 0 });
 
-      // Используем обычный запрос для синхронизации (EventSource требует специальной настройки на бэкенде)
-      // Для простоты используем обычный запрос с периодическим обновлением
-      const response = await api.get('/ozon/sync', {
-        params: {
-          clientId: settings.ozonClientId,
-          apiKey: settings.ozonApiKey,
-        },
-      });
+      // Запускаем синхронизацию
+      await api.get('/ozon/sync');
 
-      if (response.data.complete) {
-        toast.success(`Синхронизация завершена! Синхронизировано товаров: ${response.data.total || 0}`);
-        setSyncingOzon(false);
-        setSyncProgress(null);
-      } else if (response.data.progress) {
-        setSyncProgress({
-          current: response.data.progress.current || 0,
-          total: response.data.progress.total || 0,
-        });
-      } else if (response.data.error) {
-        setSyncingOzon(false);
-        setSyncProgress(null);
-        toast.error(response.data.error || 'Ошибка при синхронизации');
+      // Опрашиваем прогресс каждые 2 секунды
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
       }
+      progressIntervalRef.current = setInterval(async () => {
+        try {
+          const progressResponse = await api.get('/ozon/sync/progress');
+          
+          if (progressResponse.data.status === 'completed') {
+            if (progressIntervalRef.current) {
+              clearInterval(progressIntervalRef.current);
+              progressIntervalRef.current = null;
+            }
+            const result = progressResponse.data.result;
+            toast.success(`Синхронизация завершена! Синхронизировано товаров: ${result?.synced || 0} из ${result?.total || 0} за ${result?.duration || 0}с`);
+            
+            // Обновляем прогресс для этапа обновления данных
+            setSyncProgress({
+              current: 0,
+              total: 0,
+              stage: 'Обновление списка товаров...',
+            });
+            
+            // Запускаем обновление данных через API
+            try {
+              let allProductsData: any[] = [];
+              let currentLastId: string | undefined = undefined;
+              let hasMoreData = true;
+              let iterationCount = 0;
+              const maxIterations = 200;
+              
+              while (hasMoreData && iterationCount < maxIterations) {
+                const params: any = { limit: 100, forceRefresh: 'true' };
+                if (currentLastId) {
+                  params.lastId = currentLastId;
+                }
+                
+                setSyncProgress({
+                  current: allProductsData.length,
+                  total: result?.total || 0,
+                  stage: `Обновление списка товаров: ${allProductsData.length}...`,
+                });
+                
+                const response = await api.get('/ozon/products', { params });
+                
+                if (response.data.products && response.data.products.length > 0) {
+                  allProductsData = [...allProductsData, ...response.data.products];
+                  currentLastId = response.data.lastId;
+                  hasMoreData = !!currentLastId && response.data.products.length >= 100;
+                  iterationCount++;
+                  
+                  setSyncProgress({
+                    current: allProductsData.length,
+                    total: result?.total || allProductsData.length,
+                    stage: `Обновление списка товаров: ${allProductsData.length}...`,
+                  });
+                  
+                  if (hasMoreData) {
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                  }
+                } else {
+                  hasMoreData = false;
+                }
+              }
+              
+              toast.success(`Обновлено товаров: ${allProductsData.length}`);
+            } catch (error: any) {
+              console.error('Ошибка при обновлении списка товаров:', error);
+              toast.error('Ошибка при обновлении списка товаров');
+            }
+            
+            // Завершаем синхронизацию
+            setSyncingOzon(false);
+            setSyncProgress(null);
+            
+            // Перекидываем на страницу товаров OZON
+            setTimeout(() => {
+              navigate('/ozon');
+            }, 1000);
+          } else if (progressResponse.data.status === 'error') {
+            if (progressIntervalRef.current) {
+              clearInterval(progressIntervalRef.current);
+              progressIntervalRef.current = null;
+            }
+            setSyncingOzon(false);
+            setSyncProgress(null);
+            toast.error(progressResponse.data.error || 'Ошибка при синхронизации');
+          } else if (progressResponse.data.progress) {
+            setSyncProgress({
+              current: progressResponse.data.progress.current || 0,
+              total: progressResponse.data.progress.total || 0,
+              stage: progressResponse.data.progress.stage || 'Синхронизация...',
+            });
+          }
+        } catch (error: any) {
+          console.error('Ошибка при получении прогресса:', error);
+        }
+      }, 2000);
+
+      // Останавливаем опрос через 30 минут (на случай зависания)
+      setTimeout(() => {
+        if (progressIntervalRef.current) {
+          clearInterval(progressIntervalRef.current);
+          progressIntervalRef.current = null;
+        }
+        if (syncingOzon) {
+          setSyncingOzon(false);
+          toast.error('Синхронизация заняла слишком много времени');
+        }
+      }, 30 * 60 * 1000);
+      
+      // Очищаем интервал при размонтировании компонента
+      return () => {
+        if (progressIntervalRef.current) {
+          clearInterval(progressIntervalRef.current);
+        }
+      };
+
     } catch (error: any) {
       setSyncingOzon(false);
       setSyncProgress(null);
@@ -645,18 +879,28 @@ const Settings: React.FC = () => {
                 {syncingOzon && syncProgress && (
                   <Box sx={{ mt: 2 }}>
                     <Typography variant="body2" color="text.secondary" gutterBottom>
-                      Синхронизация товаров: {syncProgress.current} / {syncProgress.total > 0 ? syncProgress.total : '...'}
+                      {syncProgress.stage || 'Синхронизация...'}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                      {syncProgress.total > 0 
+                        ? `Товаров: ${syncProgress.current} / ${syncProgress.total}`
+                        : 'Запуск синхронизации...'}
                     </Typography>
                     {syncProgress.total > 0 && (
-                      <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <CircularProgress
+                      <Box sx={{ width: '100%', mt: 1 }}>
+                        <LinearProgress
                           variant="determinate"
                           value={(syncProgress.current / syncProgress.total) * 100}
-                          size={24}
+                          sx={{ height: 8, borderRadius: 4 }}
                         />
-                        <Typography variant="caption" color="text.secondary">
+                        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
                           {Math.round((syncProgress.current / syncProgress.total) * 100)}%
                         </Typography>
+                      </Box>
+                    )}
+                    {syncProgress.total === 0 && (
+                      <Box sx={{ width: '100%', mt: 1 }}>
+                        <LinearProgress sx={{ height: 8, borderRadius: 4 }} />
                       </Box>
                     )}
                   </Box>

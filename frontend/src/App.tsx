@@ -7,6 +7,7 @@ import Footer from './components/Footer';
 import PageLoader from './components/PageLoader';
 import AppRoutes from './components/AppRoutes';
 import Login from './pages/Login';
+import ErrorBoundary from './components/ErrorBoundary';
 import { useAuthStore } from './store/authStore';
 import { useCurrencyStore } from './store/currencyStore';
 import { ThemeContextProvider, useThemeContext } from './contexts/ThemeContext';
@@ -65,13 +66,14 @@ const AppContent: React.FC = () => {
   }
 
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route
-          path="/*"
-          element={
-            user ? (
+    <ErrorBoundary>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route
+            path="/*"
+            element={
+              user ? (
               <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
                 <Box sx={{ display: 'flex', flexGrow: 1 }}>
                   <Sidebar />
@@ -95,18 +97,27 @@ const AppContent: React.FC = () => {
                       }}
                     >
                       <Toolbar sx={{ minHeight: { xs: 56, sm: 64 } }}>
-                        <Typography 
-                          variant={isMobile ? "subtitle1" : "h6"}
-                          component="div" 
-                          sx={{ 
-                            flexGrow: 1,
-                            fontWeight: 700,
-                            fontSize: { xs: '0.875rem', sm: '1.25rem' },
-                            color: 'inherit',
-                          }}
-                        >
-                          {isMobile ? 'David' : 'David Manager'}
-                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexGrow: 1 }}>
+                          <img 
+                            src="/Logo.svg" 
+                            alt="David Manager Logo" 
+                            style={{ 
+                              height: isMobile ? '32px' : '40px',
+                              width: 'auto',
+                            }}
+                          />
+                          <Typography 
+                            variant={isMobile ? "subtitle1" : "h6"}
+                            component="div" 
+                            sx={{ 
+                              fontWeight: 700,
+                              fontSize: { xs: '0.875rem', sm: '1.25rem' },
+                              color: 'inherit',
+                            }}
+                          >
+                            {isMobile ? 'David' : 'David Manager'}
+                          </Typography>
+                        </Box>
                       
                       {user.role === 'director' && !isMobile && (
                         <ToggleButtonGroup
@@ -232,6 +243,7 @@ const AppContent: React.FC = () => {
         />
       </Routes>
     </BrowserRouter>
+    </ErrorBoundary>
   );
 };
 

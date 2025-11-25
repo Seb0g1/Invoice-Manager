@@ -55,7 +55,17 @@ const Ozon: React.FC = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   useEffect(() => {
-    fetchAllProducts();
+    // Проверяем, нужно ли автоматически обновить данные после синхронизации
+    const shouldAutoRefresh = sessionStorage.getItem('ozonAutoRefresh') === 'true';
+    if (shouldAutoRefresh) {
+      sessionStorage.removeItem('ozonAutoRefresh');
+      // Запускаем обновление с задержкой, чтобы страница успела загрузиться
+      setTimeout(() => {
+        fetchAllProducts(true);
+      }, 500);
+    } else {
+      fetchAllProducts();
+    }
   }, []);
 
   // Сбрасываем страницу при изменении фильтров
@@ -68,7 +78,8 @@ const Ozon: React.FC = () => {
       setLoading(true);
       setLoadingProgress({ current: 0 });
       
-      // Если не требуется принудительное обновление, пробуем загрузить из кеша
+      // Всегда сначала пробуем загрузить из БД (кеша)
+      // forceRefresh используется только для принудительного обновления через API OZON
       if (!forceRefresh) {
         try {
           // Загружаем все товары из БД одним запросом
@@ -76,10 +87,24 @@ const Ozon: React.FC = () => {
           const cacheResponse = await api.get('/ozon/products', { params: cacheParams });
           
           if (cacheResponse.data.fromCache && cacheResponse.data.products && cacheResponse.data.products.length > 0) {
+            // Логируем первые несколько товаров для отладки
+            if (cacheResponse.data.products.length > 0) {
+              console.log('[DEBUG] Загружено товаров из БД:', cacheResponse.data.products.length);
+              const sampleProducts = cacheResponse.data.products.slice(0, 3);
+              sampleProducts.forEach((p: any) => {
+                console.log(`[DEBUG] Товар ${p.productId} (${p.name}):`, {
+                  stock: p.stock,
+                  stockPresent: p.stock?.present,
+                  hasStock: p.hasStock,
+                  price: p.price,
+                  primaryImage: p.primaryImage
+                });
+              });
+            }
             setAllProducts(cacheResponse.data.products);
             setLoadingProgress(null);
             setLoading(false);
-            toast.success(`Загружено товаров из кеша: ${cacheResponse.data.products.length}`);
+            // Не показываем toast при обычной загрузке из кеша
             return;
           }
         } catch (cacheError: any) {
@@ -199,7 +224,31 @@ const Ozon: React.FC = () => {
   };
 
   const handleRefresh = () => {
-    fetchAllProducts(true); // Принудительное обновление
+    fetchAllProducts(true); // Принудительное обновление через API OZON
+  };
+
+  const handleRefreshFromDB = async () => {
+    try {
+      setLoading(true);
+      setLoadingProgress({ current: 0 });
+      
+      // Загружаем все товары из БД одним запросом
+      const cacheParams: any = { limit: 20000 }; // Большой лимит для получения всех товаров из БД
+      const cacheResponse = await api.get('/ozon/products', { params: cacheParams });
+      
+      if (cacheResponse.data.products && cacheResponse.data.products.length > 0) {
+        setAllProducts(cacheResponse.data.products);
+        toast.success(`Обновлено товаров из БД: ${cacheResponse.data.products.length}`);
+      } else {
+        toast.error('Не удалось загрузить товары из БД');
+      }
+    } catch (error: any) {
+      console.error('Ошибка при обновлении из БД:', error);
+      toast.error('Ошибка при обновлении данных из БД');
+    } finally {
+      setLoading(false);
+      setLoadingProgress(null);
+    }
   };
 
   // Фильтрация и сортировка продуктов с мемоизацией
@@ -215,11 +264,12 @@ const Ozon: React.FC = () => {
         }
       }
       
-      // Фильтр по наличию
-      if (inStock === 'inStock' && product.stock.present === 0) {
+      // Фильтр по наличию - используем полный остаток (present + reserved)
+      const totalStock = (product.stock.present || 0) + (product.stock.reserved || 0);
+      if (inStock === 'inStock' && totalStock === 0) {
         return false;
       }
-      if (inStock === 'outOfStock' && product.stock.present > 0) {
+      if (inStock === 'outOfStock' && totalStock > 0) {
         return false;
       }
       
@@ -248,7 +298,10 @@ const Ozon: React.FC = () => {
           comparison = a.price - b.price;
           break;
         case 'stock':
-          comparison = a.stock.present - b.stock.present;
+          // Сортируем по полному остатку (present + reserved)
+          const totalStockA = (a.stock.present || 0) + (a.stock.reserved || 0);
+          const totalStockB = (b.stock.present || 0) + (b.stock.reserved || 0);
+          comparison = totalStockA - totalStockB;
           break;
         case 'sku':
           comparison = a.sku - b.sku;
@@ -346,15 +399,16 @@ const Ozon: React.FC = () => {
             Фильтры
           </Button>
 
+          {/* Кнопка обновления данных из БД */}
           <Button
             variant="outlined"
-            startIcon={loading ? <CircularProgress size={20} /> : <RefreshIcon />}
-            onClick={handleRefresh}
+            startIcon={<RefreshIcon />}
+            onClick={handleRefreshFromDB}
             disabled={loading}
             size={isMobile ? "large" : "medium"}
             sx={{ minHeight: { xs: 44, sm: 'auto' } }}
           >
-            {loading ? 'Загрузка...' : 'Обновить'}
+            Обновить
           </Button>
           
           <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 150 } }}>
@@ -585,15 +639,16 @@ const Ozon: React.FC = () => {
                         color={product.status === 'active' ? 'success' : 'default'}
                       />
                       <Chip
-                        label={`Остаток: ${product.stock.present || 0}`}
+                        label={`Остаток: ${(product.stock.present || 0) + (product.stock.reserved || 0)}`}
                         size="small"
-                        color={product.stock.present > 0 ? 'primary' : 'default'}
+                        color={(product.stock.present || 0) + (product.stock.reserved || 0) > 0 ? 'primary' : 'default'}
                       />
-                      {product.stock.reserved > 0 && (
+                      {(product.stock.present || 0) > 0 && (product.stock.reserved || 0) > 0 && (
                         <Chip
-                          label={`Зарезервировано: ${product.stock.reserved}`}
+                          label={`В наличии: ${product.stock.present}, Зарезервировано: ${product.stock.reserved}`}
                           size="small"
-                          color="warning"
+                          color="info"
+                          sx={{ fontSize: '0.7rem' }}
                         />
                       )}
                     </Box>

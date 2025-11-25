@@ -23,7 +23,8 @@ import {
   ExpandLess,
   ExpandMore,
   List as ListIcon,
-  Edit as EditIcon
+  Edit as EditIcon,
+  TrendingUp as TrendingUpIcon
 } from '@mui/icons-material';
 import { useAuthStore } from '../store/authStore';
 import { useThemeContext } from '../contexts/ThemeContext';
@@ -167,6 +168,36 @@ const Sidebar: React.FC = () => {
       path: '/yandex',
       roles: ['director']
     },
+    {
+      text: 'Все товары (Market)',
+      icon: <ListIcon />,
+      path: '/yandex-market/products',
+      roles: ['director']
+    },
+    {
+      text: 'Управление ценами',
+      icon: <EditIcon />,
+      path: '/price-control',
+      roles: ['director']
+    },
+    {
+      text: 'Обновление цен (Go)',
+      icon: <EditIcon />,
+      path: '/price-update',
+      roles: ['director']
+    },
+    {
+      text: 'Бизнесы',
+      icon: <StoreIcon />,
+      path: '/yandex-market/businesses',
+      roles: ['director']
+    },
+    {
+      text: 'Статистика',
+      icon: <TrendingUpIcon />,
+      path: '/yandex-market/stats',
+      roles: ['director']
+    },
     ...yandexAccounts.map((account, index) => ({
       text: account.name || `Аккаунт ${index + 1}`,
       icon: <StoreIcon />,
@@ -201,10 +232,22 @@ const Sidebar: React.FC = () => {
         '& .MuiDrawer-paper': {
           width: drawerWidth,
           boxSizing: 'border-box',
+          borderRight: 'none',
+          boxShadow: theme.palette.mode === 'dark' 
+            ? '2px 0 8px rgba(0, 0, 0, 0.3)' 
+            : '2px 0 8px rgba(0, 0, 0, 0.1)',
         }
       }}
     >
-      <Toolbar sx={{ px: 2 }}>
+      <Toolbar sx={{ px: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        <img 
+          src="/Logo.svg" 
+          alt="David Manager Logo" 
+          style={{ 
+            height: '36px',
+            width: 'auto',
+          }}
+        />
         <Typography
           variant="h6"
           noWrap
@@ -213,8 +256,7 @@ const Sidebar: React.FC = () => {
             fontWeight: 700,
             color: theme.palette.text.primary,
             fontSize: '1.25rem',
-            width: '100%',
-            textAlign: 'left',
+            flexGrow: 1,
           }}
         >
           David Manager

@@ -45,3 +45,8 @@ backend/uploads/*
 # Coverage
 coverage/
 .nyc_output/
+
+# OpenAPI generated clients
+temp-openapi-repo/
+backend/src/generated/
+backend/yandex-market-partner-api/

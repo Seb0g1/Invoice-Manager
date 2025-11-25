@@ -10,6 +10,11 @@ import Warehouse from '../pages/Warehouse';
 import Ozon from '../pages/Ozon';
 import OzonPrices from '../pages/OzonPrices';
 import Yandex from '../pages/Yandex';
+import YandexPriceControl from '../pages/YandexPriceControl';
+import YandexPriceUpdate from '../pages/YandexPriceUpdate';
+import YandexBusinesses from '../pages/YandexBusinesses';
+import YandexMarketProducts from '../pages/YandexMarketProducts';
+import YandexMarketStats from '../pages/YandexMarketStats';
 import Settings from '../pages/Settings';
 import NotFound from '../pages/NotFound';
 import PageLoader from './PageLoader';
@@ -132,6 +137,46 @@ const AppRoutes: React.FC = () => {
         element={
           <ProtectedRoute 
             element={<Yandex />} 
+            allowedRoles={['director']}
+          />} 
+      />
+      <Route 
+        path="/price-control" 
+        element={
+          <ProtectedRoute 
+            element={<YandexPriceControl />} 
+            allowedRoles={['director']}
+          />} 
+      />
+      <Route 
+        path="/price-update" 
+        element={
+          <ProtectedRoute 
+            element={<YandexPriceUpdate />} 
+            allowedRoles={['director']}
+          />} 
+      />
+      <Route 
+        path="/yandex-market/businesses" 
+        element={
+          <ProtectedRoute 
+            element={<YandexBusinesses />} 
+            allowedRoles={['director']}
+          />} 
+      />
+      <Route 
+        path="/yandex-market/products" 
+        element={
+          <ProtectedRoute 
+            element={<YandexMarketProducts />} 
+            allowedRoles={['director']}
+          />} 
+      />
+      <Route 
+        path="/yandex-market/stats" 
+        element={
+          <ProtectedRoute 
+            element={<YandexMarketStats />} 
             allowedRoles={['director']}
           />} 
       />

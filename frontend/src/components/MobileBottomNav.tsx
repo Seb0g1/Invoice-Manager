@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   BottomNavigation,
@@ -16,12 +16,15 @@ import {
 } from '@mui/icons-material';
 import { useAuthStore } from '../store/authStore';
 import { useThemeContext } from '../contexts/ThemeContext';
+import MobileNavDrawer from './MobileNavDrawer';
 
 const MobileBottomNav: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuthStore();
   const { mode } = useThemeContext();
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerCategory, setDrawerCategory] = useState<'yandex' | 'ozon' | null>(null);
 
   // Простая функция для проверки видимости страницы по ролям
   const isPageVisible = (roles?: string[]): boolean => {
@@ -35,13 +38,25 @@ const MobileBottomNav: React.FC = () => {
     if (location.pathname.startsWith('/invoices')) return '/invoices';
     if (location.pathname.startsWith('/picking-lists')) return '/picking-lists';
     if (location.pathname.startsWith('/warehouse')) return '/warehouse';
-    if (location.pathname.startsWith('/yandex')) return '/yandex';
-    if (location.pathname.startsWith('/ozon')) return '/ozon/products';
+    if (location.pathname.startsWith('/yandex') || location.pathname.startsWith('/yandex-market') || location.pathname.startsWith('/price-control')) return 'yandex';
+    if (location.pathname.startsWith('/ozon')) return 'ozon';
     if (location.pathname.startsWith('/settings')) {
       if (user?.role === 'collector') return '/settings/profile';
       return '/settings';
     }
     return '/suppliers';
+  };
+
+  const handleNavigation = (value: string) => {
+    if (value === 'yandex') {
+      setDrawerCategory('yandex');
+      setDrawerOpen(true);
+    } else if (value === 'ozon') {
+      setDrawerCategory('ozon');
+      setDrawerOpen(true);
+    } else {
+      navigate(value);
+    }
   };
 
   return (
@@ -66,7 +81,7 @@ const MobileBottomNav: React.FC = () => {
     >
       <BottomNavigation
         value={getCurrentValue()}
-        onChange={(_, newValue) => navigate(newValue)}
+        onChange={(_, newValue) => handleNavigation(newValue)}
         showLabels
         sx={{
           height: { xs: 64, sm: 70 },
@@ -125,14 +140,14 @@ const MobileBottomNav: React.FC = () => {
           <BottomNavigationAction
             label="Yandex"
             icon={<StoreIcon />}
-            value="/yandex"
+            value="yandex"
           />
         )}
         {isPageVisible(['director']) && (
           <BottomNavigationAction
             label="OZON"
             icon={<ShoppingCartIcon />}
-            value="/ozon/products"
+            value="ozon"
           />
         )}
         {isPageVisible(['director']) && (
@@ -150,6 +165,15 @@ const MobileBottomNav: React.FC = () => {
           />
         )}
       </BottomNavigation>
+      
+      <MobileNavDrawer
+        open={drawerOpen}
+        onClose={() => {
+          setDrawerOpen(false);
+          setDrawerCategory(null);
+        }}
+        category={drawerCategory}
+      />
     </Paper>
   );
 };

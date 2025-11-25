@@ -100,6 +100,14 @@ export interface OzonConfig {
   enabled: boolean;
 }
 
+export interface EmptyStateProps {
+  icon?: React.ReactNode;
+  title: string;
+  description?: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}
+
 export interface OzonProduct {
   productId: number;
   offerId: string;
