@@ -11,7 +11,7 @@ export const warehouseItemSchema = yup.object({
   quantity: yup
     .number()
     .nullable()
-    .transform((value, originalValue) => {
+    .transform((value: any, originalValue: any) => {
       // Преобразуем пустую строку в null
       if (originalValue === '' || originalValue === null || originalValue === undefined) {
         return null;
@@ -24,11 +24,11 @@ export const warehouseItemSchema = yup.object({
     .string()
     .nullable()
     .max(100, 'Артикул не должен превышать 100 символов')
-    .transform((value) => value || null),
+    .transform((value: any) => value || null),
   price: yup
     .number()
     .nullable()
-    .transform((value, originalValue) => {
+    .transform((value: any, originalValue: any) => {
       // Преобразуем пустую строку в null
       if (originalValue === '' || originalValue === null || originalValue === undefined) {
         return null;

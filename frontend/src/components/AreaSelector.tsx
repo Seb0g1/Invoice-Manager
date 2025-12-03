@@ -99,11 +99,6 @@ const AreaSelector: React.FC<AreaSelectorProps> = ({
     const mouseX = clientX - containerRect.left;
     const mouseY = clientY - containerRect.top;
     
-    // Получаем реальные размеры изображения с учетом padding контейнера
-    const padding = 16; // padding контейнера
-    const availableWidth = containerRect.width - padding * 2;
-    const availableHeight = containerRect.height - padding * 2;
-    
     // Координаты центра доступной области
     const centerX = containerRect.width / 2;
     const centerY = containerRect.height / 2;

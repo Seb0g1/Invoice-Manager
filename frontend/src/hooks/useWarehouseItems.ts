@@ -61,7 +61,7 @@ export const useCreateWarehouseItem = () => {
       queryClient.invalidateQueries({ queryKey: ['warehouseItems'] });
       toast.success('Товар добавлен');
     },
-    onError: (error) => {
+    onError: (error: any) => {
       handleError(error, 'Ошибка при добавлении товара');
     },
   });
@@ -80,7 +80,7 @@ export const useUpdateWarehouseItem = () => {
       queryClient.invalidateQueries({ queryKey: ['warehouseItems'] });
       toast.success('Товар обновлен');
     },
-    onError: (error) => {
+    onError: (error: any) => {
       handleError(error, 'Ошибка при обновлении товара');
     },
   });
@@ -99,7 +99,7 @@ export const useDeleteWarehouseItem = () => {
       queryClient.invalidateQueries({ queryKey: ['warehouseItems'] });
       toast.success('Товар удален');
     },
-    onError: (error) => {
+    onError: (error: any) => {
       handleError(error, 'Ошибка при удалении товара');
     },
   });
@@ -114,11 +114,11 @@ export const useDeleteWarehouseItems = () => {
       const response = await api.delete('/warehouse/bulk', { data: { ids } });
       return response.data;
     },
-    onSuccess: (_, ids) => {
+    onSuccess: (_: any, ids: string[]) => {
       queryClient.invalidateQueries({ queryKey: ['warehouseItems'] });
       toast.success(`Удалено товаров: ${ids.length}`);
     },
-    onError: (error) => {
+    onError: (error: any) => {
       handleError(error, 'Ошибка при удалении товаров');
     },
   });

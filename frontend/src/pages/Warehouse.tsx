@@ -65,7 +65,7 @@ const Warehouse: React.FC = () => {
   
   // React Query hooks
   const queryClient = useQueryClient();
-  const { data, isLoading, error } = useWarehouseItems(page, itemsPerPage, searchTerm);
+  const { data, isLoading } = useWarehouseItems(page, itemsPerPage, searchTerm);
   const createMutation = useCreateWarehouseItem();
   const updateMutation = useUpdateWarehouseItem();
   const deleteMutation = useDeleteWarehouseItem();
@@ -179,7 +179,7 @@ const Warehouse: React.FC = () => {
 
   const handleSelectAll = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.checked) {
-      setSelectedItems(filteredItems.map(item => item._id));
+      setSelectedItems(filteredItems.map((item: WarehouseItem) => item._id));
     } else {
       setSelectedItems([]);
     }
@@ -383,7 +383,7 @@ const Warehouse: React.FC = () => {
                 </TableCell>
               </TableRow>
             ) : (
-              filteredItems.map((item) => (
+              filteredItems.map((item: WarehouseItem) => (
                 <TableRow key={item._id} hover selected={selectedItems.includes(item._id)}>
                   <TableCell padding="checkbox">
                     <Checkbox
@@ -520,7 +520,7 @@ const Warehouse: React.FC = () => {
             <Controller
               name="name"
               control={createControl}
-              render={({ field }) => (
+              render={({ field }: { field: any }) => (
                 <TextField
                   {...field}
                   fullWidth
@@ -541,7 +541,7 @@ const Warehouse: React.FC = () => {
             <Controller
               name="quantity"
               control={createControl}
-              render={({ field }) => (
+              render={({ field }: { field: any }) => (
                 <TextField
                   {...field}
                   fullWidth
@@ -567,7 +567,7 @@ const Warehouse: React.FC = () => {
             <Controller
               name="article"
               control={createControl}
-              render={({ field }) => (
+              render={({ field }: { field: any }) => (
                 <TextField
                   {...field}
                   fullWidth
@@ -589,7 +589,7 @@ const Warehouse: React.FC = () => {
             <Controller
               name="price"
               control={createControl}
-              render={({ field }) => (
+              render={({ field }: { field: any }) => (
                 <TextField
                   {...field}
                   fullWidth
@@ -632,7 +632,7 @@ const Warehouse: React.FC = () => {
             <Controller
               name="name"
               control={editControl}
-              render={({ field }) => (
+              render={({ field }: { field: any }) => (
                 <TextField
                   {...field}
                   fullWidth
@@ -653,7 +653,7 @@ const Warehouse: React.FC = () => {
             <Controller
               name="quantity"
               control={editControl}
-              render={({ field }) => (
+              render={({ field }: { field: any }) => (
                 <TextField
                   {...field}
                   fullWidth
@@ -679,7 +679,7 @@ const Warehouse: React.FC = () => {
             <Controller
               name="article"
               control={editControl}
-              render={({ field }) => (
+              render={({ field }: { field: any }) => (
                 <TextField
                   {...field}
                   fullWidth
@@ -701,7 +701,7 @@ const Warehouse: React.FC = () => {
             <Controller
               name="price"
               control={editControl}
-              render={({ field }) => (
+              render={({ field }: { field: any }) => (
                 <TextField
                   {...field}
                   fullWidth

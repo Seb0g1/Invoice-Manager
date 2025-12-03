@@ -29,9 +29,6 @@ import { useAuthStore } from '../store/authStore';
 import { useThemeContext } from '../contexts/ThemeContext';
 import { useCurrencyStore } from '../store/currencyStore';
 import toast from 'react-hot-toast';
-import { handleError } from '../utils/errorHandler';
-import SkeletonLoader from '../components/SkeletonLoader';
-import { useInvoiceStatistics } from '../hooks/useInvoices';
 
 interface Statistics {
   totalInvoices: number;

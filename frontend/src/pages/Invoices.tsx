@@ -11,12 +11,8 @@ import {
   Typography,
   TextField,
   MenuItem,
-  CircularProgress,
   IconButton,
-  useMediaQuery,
-  Pagination,
-  FormControl,
-  Select
+  useMediaQuery
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { format } from 'date-fns';
@@ -44,8 +40,6 @@ const Invoices: React.FC = () => {
   const [currentPhotoUrl, setCurrentPhotoUrl] = useState('');
   const [deleteInvoiceModalOpen, setDeleteInvoiceModalOpen] = useState(false);
   const [invoiceToDelete, setInvoiceToDelete] = useState<Invoice | null>(null);
-  const [page, setPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(50);
   const { theme } = useThemeContext();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
@@ -60,17 +54,11 @@ const Invoices: React.FC = () => {
   const deleteInvoiceMutation = useDeleteInvoice();
   
   const invoices = data?.items || [];
-  const totalPages = data?.pagination?.totalPages || 1;
-  const totalItems = data?.pagination?.total || invoices.length;
   const loading = isLoading;
 
   useEffect(() => {
     fetchSuppliers();
   }, [isDirector]);
-  
-  useEffect(() => {
-    setPage(1); // Сбрасываем на первую страницу при изменении фильтров
-  }, [filterSupplier, filterStartDate, filterEndDate]);
 
   const fetchSuppliers = async () => {
     try {
@@ -101,9 +89,7 @@ const Invoices: React.FC = () => {
   }, [error]);
 
   const handleSuccess = () => {
-    if (isDirector) {
-      fetchInvoices();
-    }
+    // React Query автоматически обновит данные через invalidateQueries
     fetchSuppliers();
   };
 
@@ -237,7 +223,7 @@ const Invoices: React.FC = () => {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  invoices.map((invoice) => (
+                  invoices.map((invoice: Invoice) => (
                     <TableRow key={invoice._id}>
                       <TableCell>
                         <LazyImage
@@ -246,7 +232,7 @@ const Invoices: React.FC = () => {
                           width={{ xs: 60, sm: 80 }}
                           height={{ xs: 60, sm: 80 }}
                           thumbnailSrc={invoice.photoUrl.replace('/uploads/', '/uploads/thumb_')}
-                          onError={(e) => {
+                          onError={() => {
                             console.error('Ошибка загрузки фото:', invoice.photoUrl);
                           }}
                           sx={{

@@ -1,5 +1,5 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
-import { handleError, getErrorMessage } from '../utils/errorHandler';
+import { getErrorMessage } from '../utils/errorHandler';
 
 const api = axios.create({
   baseURL: '/api',

@@ -229,7 +229,7 @@ const YandexBusinesses: React.FC = () => {
       
       // Запускаем синхронизацию без лимита (или с большим лимитом)
       // Если нужно ограничить, можно передать maxOffers в query параметрах
-      const response = await api.post('/yandex-market-go/sync/products');
+      await api.post('/yandex-market-go/sync/products');
       
       toast.success('Синхронизация запущена');
       

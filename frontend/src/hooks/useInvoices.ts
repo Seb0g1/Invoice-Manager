@@ -47,7 +47,7 @@ export const useDeleteInvoice = () => {
       queryClient.invalidateQueries({ queryKey: ['supplier'] });
       toast.success('Накладная удалена');
     },
-    onError: (error) => {
+    onError: (error: any) => {
       handleError(error, 'Ошибка при удалении накладной');
     },
   });

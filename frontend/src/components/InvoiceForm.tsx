@@ -1,6 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useForm, Controller } from 'react-hook-form';
-import { yupResolver } from '@hookform/resolvers/yup';
 import {
   Box,
   Button,
@@ -40,7 +38,6 @@ import { useThemeContext } from '../contexts/ThemeContext';
 import toast from 'react-hot-toast';
 import { createWorker } from 'tesseract.js';
 import AreaSelector, { Area } from './AreaSelector';
-import { invoiceSchema, InvoiceFormData } from '../utils/validation';
 
 interface InvoiceFormProps {
   suppliers: Supplier[];
@@ -111,7 +108,6 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
     }
   }, [paidAmountType, paidAmountUSD, paidAmountRUB, rate]);
 
-  const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
 
   // Функция для оптимизации изображения для мобильных устройств
   const optimizeImageForMobile = async (file: File, maxWidth: number = 1200): Promise<File> => {
@@ -194,11 +190,6 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
 
         // Учитываем поворот при обрезке
         if (rotation !== 0) {
-          // Применяем поворот к координатам
-          const centerX = img.width / 2;
-          const centerY = img.height / 2;
-          const rad = (rotation * Math.PI) / 180;
-          
           // Поворачиваем координаты области
           if (rotation === 90 || rotation === -270) {
             // Поворот на 90° по часовой стрелке
@@ -367,8 +358,6 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
       ];
 
       let итогоИндекс = -1;
-      let итогоТекст = '';
-      let searchText = text; // Используем оригинальный текст для поиска позиции
 
       // Сначала ищем в нормализованном тексте
       for (const pattern of итогоPatterns) {

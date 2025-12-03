@@ -50,7 +50,6 @@ import { useThemeContext } from '../contexts/ThemeContext';
 import { useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
 import { handleError } from '../utils/errorHandler';
-import SkeletonLoader from '../components/SkeletonLoader';
 import { useDebounce } from '../utils/debounce';
 import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
@@ -582,7 +581,7 @@ const Suppliers: React.FC = () => {
             <Controller
               name="name"
               control={createSupplierControl}
-              render={({ field }) => (
+              render={({ field }: { field: any }) => (
                 <TextField
                   {...field}
                   fullWidth

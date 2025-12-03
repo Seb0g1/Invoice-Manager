@@ -10,7 +10,6 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  CircularProgress,
   InputAdornment,
   IconButton,
   Chip,
@@ -128,7 +127,7 @@ const YandexMarketProducts: React.FC = () => {
   const [updatingPrice, setUpdatingPrice] = useState(false);
   const { theme } = useThemeContext();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
 
   // Загружаем список бизнесов и категорий

@@ -43,7 +43,7 @@ export const useCreateSupplier = () => {
       queryClient.invalidateQueries({ queryKey: ['suppliers'] });
       toast.success('Поставщик создан');
     },
-    onError: (error) => {
+    onError: (error: any) => {
       handleError(error, 'Ошибка при создании поставщика');
     },
   });
