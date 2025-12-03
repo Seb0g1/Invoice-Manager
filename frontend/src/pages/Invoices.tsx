@@ -59,9 +59,9 @@ const Invoices: React.FC = () => {
   });
   const deleteInvoiceMutation = useDeleteInvoice();
   
-  const invoices = data || [];
-  const totalPages = 1; // TODO: добавить пагинацию на бэкенде
-  const totalItems = invoices.length;
+  const invoices = data?.items || [];
+  const totalPages = data?.pagination?.totalPages || 1;
+  const totalItems = data?.pagination?.total || invoices.length;
   const loading = isLoading;
 
   useEffect(() => {

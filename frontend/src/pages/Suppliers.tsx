@@ -238,7 +238,9 @@ const Suppliers: React.FC = () => {
   }
 
   const details = currentSupplierId ? supplierDetails[currentSupplierId] : null;
-  const unpaidInvoices = details?.invoices.filter((inv) => !inv.paid) || [];
+  const unpaidInvoices = Array.isArray(details?.invoices) 
+    ? details.invoices.filter((inv) => !inv.paid) 
+    : [];
 
   return (
     <Box sx={{ p: { xs: 1.5, sm: 2, md: 3 } }}>
@@ -303,7 +305,9 @@ const Suppliers: React.FC = () => {
           <TableBody>
             {filteredSuppliers.map((supplier) => {
               const details = supplierDetails[supplier._id];
-              const unpaidInvoices = details?.invoices.filter((inv) => !inv.paid) || [];
+              const unpaidInvoices = Array.isArray(details?.invoices) 
+                ? details.invoices.filter((inv) => !inv.paid) 
+                : [];
               const selected = selectedInvoices[supplier._id] || [];
 
               return (

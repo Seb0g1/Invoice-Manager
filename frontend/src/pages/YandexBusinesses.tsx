@@ -96,10 +96,20 @@ const YandexBusinesses: React.FC = () => {
     try {
       setLoading(true);
       const response = await api.get('/yandex-market/businesses');
-      setBusinesses(response.data || []);
+      // Обрабатываем разные форматы ответа
+      let businessesList: Business[] = [];
+      if (Array.isArray(response.data)) {
+        businessesList = response.data;
+      } else if (response.data?.businesses && Array.isArray(response.data.businesses)) {
+        businessesList = response.data.businesses;
+      } else if (response.data) {
+        businessesList = [response.data];
+      }
+      setBusinesses(businessesList);
     } catch (error: any) {
       console.error('Ошибка загрузки бизнесов:', error);
       toast.error('Ошибка загрузки бизнесов');
+      setBusinesses([]); // Устанавливаем пустой массив при ошибке
     } finally {
       setLoading(false);
     }
@@ -305,7 +315,7 @@ const YandexBusinesses: React.FC = () => {
             variant="outlined"
             startIcon={syncing ? <CircularProgress size={20} /> : <SyncIcon />}
             onClick={handleSyncProducts}
-            disabled={syncing || businesses.filter(b => b.enabled).length === 0}
+            disabled={syncing || !Array.isArray(businesses) || businesses.filter(b => b.enabled).length === 0}
             size={isMobile ? 'large' : 'medium'}
           >
             {syncing ? 'Синхронизация...' : 'Синхронизировать товары'}
@@ -348,7 +358,7 @@ const YandexBusinesses: React.FC = () => {
         </Paper>
       )}
 
-      {businesses.length === 0 ? (
+      {!Array.isArray(businesses) || businesses.length === 0 ? (
         <Paper sx={{ p: 4, textAlign: 'center' }}>
           <Typography variant="h6" gutterBottom>
             Нет добавленных бизнесов

@@ -51,17 +51,20 @@ import {
   useDeleteWarehouseItems 
 } from '../hooks/useWarehouseItems';
 import { useDebounce } from '../utils/debounce';
+import { useQueryClient } from '@tanstack/react-query';
 
 const Warehouse: React.FC = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [editingItem, setEditingItem] = useState<WarehouseItem | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(50);
   
   // React Query hooks
+  const queryClient = useQueryClient();
   const { data, isLoading, error } = useWarehouseItems(page, itemsPerPage, searchTerm);
   const createMutation = useCreateWarehouseItem();
   const updateMutation = useUpdateWarehouseItem();
@@ -107,6 +110,7 @@ const Warehouse: React.FC = () => {
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const { theme } = useThemeContext();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
   useEffect(() => {
     setPage(1); // Сбрасываем на первую страницу при поиске

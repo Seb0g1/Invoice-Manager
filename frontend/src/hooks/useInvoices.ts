@@ -10,9 +10,19 @@ interface GetInvoicesParams {
   endDate?: string;
 }
 
+interface InvoicesResponse {
+  items: Invoice[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
 // Получение накладных
 export const useInvoices = (params: GetInvoicesParams = {}) => {
-  return useQuery<Invoice[], Error>({
+  return useQuery<InvoicesResponse, Error>({
     queryKey: ['invoices', params],
     queryFn: async () => {
       const response = await api.get('/invoices', { params });

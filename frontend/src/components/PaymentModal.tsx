@@ -29,9 +29,11 @@ const PaymentModal: React.FC<PaymentModalProps> = ({
   open,
   onClose,
   onConfirm,
-  invoices,
+  invoices: invoicesProp,
   selectedInvoices
 }) => {
+  // Защита от неверного формата данных
+  const invoices = Array.isArray(invoicesProp) ? invoicesProp : [];
   const { theme } = useThemeContext();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [paymentType, setPaymentType] = useState<'selected' | 'one' | 'all' | 'custom'>('selected');
