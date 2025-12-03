@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "dev": "nodemon --exec ts-node src/index.ts",
-    "build": "tsc",
+    "build": "node --max-old-space-size=4096 node_modules/typescript/bin/tsc",
     "start": "node dist/index.js",
     "sync-ozon": "ts-node scripts/sync-ozon-products.ts",
     "check-stocks": "ts-node scripts/check-stocks-in-db.ts",
