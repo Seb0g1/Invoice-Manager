@@ -13,7 +13,10 @@ import {
   MenuItem,
   CircularProgress,
   IconButton,
-  useMediaQuery
+  useMediaQuery,
+  Pagination,
+  FormControl,
+  Select
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { format } from 'date-fns';
@@ -29,7 +32,6 @@ import toast from 'react-hot-toast';
 import { handleError } from '../utils/errorHandler';
 import SkeletonLoader from '../components/SkeletonLoader';
 import { useInvoices, useDeleteInvoice } from '../hooks/useInvoices';
-import { Pagination, FormControl, Select, MenuItem } from '@mui/material';
 import LazyImage from '../components/LazyImage';
 
 const Invoices: React.FC = () => {

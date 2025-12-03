@@ -1,7 +1,9 @@
 #!/bin/bash
 
 # Скрипт для автоматического деплоя проекта davidsklad.ru
-# Использование: ./deploy.sh
+# Использование: ./deploy.sh [--pull] [--skip-build]
+#   --pull      - обновить код с GitHub перед деплоем
+#   --skip-build - пропустить сборку (только перезапуск)
 
 set -e
 
@@ -23,6 +25,26 @@ PROJECT_DIR="/var/www/davidsklad"
 BACKEND_DIR="$PROJECT_DIR/backend"
 FRONTEND_DIR="$PROJECT_DIR/frontend"
 
+# Парсинг аргументов
+PULL_FROM_GITHUB=false
+SKIP_BUILD=false
+
+for arg in "$@"; do
+  case $arg in
+    --pull)
+      PULL_FROM_GITHUB=true
+      shift
+      ;;
+    --skip-build)
+      SKIP_BUILD=true
+      shift
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
 # Проверка существования директорий
 if [ ! -d "$PROJECT_DIR" ]; then
     echo -e "${YELLOW}⚠️  Директория проекта не найдена. Создаю...${NC}"
@@ -35,20 +57,28 @@ cd "$PROJECT_DIR"
 # 1. Обновление зависимостей Backend
 echo -e "${GREEN}📦 Установка зависимостей Backend...${NC}"
 cd "$BACKEND_DIR"
-npm install --production
+npm install
 
 # 2. Сборка Backend
-echo -e "${GREEN}🏗️  Сборка Backend...${NC}"
-npm run build
+if [ "$SKIP_BUILD" = false ]; then
+    echo -e "${GREEN}🏗️  Сборка Backend...${NC}"
+    npm run build
+else
+    echo -e "${YELLOW}⏭️  Пропуск сборки Backend (--skip-build)${NC}"
+fi
 
 # 3. Обновление зависимостей Frontend
-echo -e "${GREEN}📦 Установка зависимостей Frontend...${NC}"
-cd "$FRONTEND_DIR"
-npm install --production
+if [ "$SKIP_BUILD" = false ]; then
+    echo -e "${GREEN}📦 Установка зависимостей Frontend...${NC}"
+    cd "$FRONTEND_DIR"
+    npm install
 
-# 4. Сборка Frontend
-echo -e "${GREEN}🏗️  Сборка Frontend...${NC}"
-npm run build
+    # 4. Сборка Frontend
+    echo -e "${GREEN}🏗️  Сборка Frontend...${NC}"
+    npm run build
+else
+    echo -e "${YELLOW}⏭️  Пропуск сборки Frontend (--skip-build)${NC}"
+fi
 
 # 5. Создание директории для uploads (если не существует)
 echo -e "${GREEN}📁 Создание директории для uploads...${NC}"
