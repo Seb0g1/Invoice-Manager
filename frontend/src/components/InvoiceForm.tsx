@@ -588,23 +588,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
         // Определяем размер изображения для масштабирования
         const img = new Image();
         img.onload = () => {
-          const containerWidth = 800;
-          const containerHeight = 600;
-          const imgAspect = img.width / img.height;
-          const containerAspect = containerWidth / containerHeight;
-          
-          let displayWidth = img.width;
-          let displayHeight = img.height;
-
-          if (imgAspect > containerAspect) {
-            displayWidth = containerWidth;
-            displayHeight = containerWidth / imgAspect;
-          } else {
-            displayHeight = containerHeight;
-            displayWidth = containerHeight * imgAspect;
-          }
-
-          // Размеры изображения сохранены для будущего использования
+          // Изображение загружено, можно использовать для дальнейшей обработки
         };
         img.src = reader.result as string;
       };
