@@ -108,6 +108,8 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
     }
   }, [paidAmountType, paidAmountUSD, paidAmountRUB, rate]);
 
+  const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
+
 
   // Функция для оптимизации изображения для мобильных устройств
   const optimizeImageForMobile = async (file: File, maxWidth: number = 1200): Promise<File> => {
@@ -358,6 +360,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
       ];
 
       let итогоИндекс = -1;
+      let итогоТекст = '';
 
       // Сначала ищем в нормализованном тексте
       for (const pattern of итогоPatterns) {

@@ -106,21 +106,13 @@ const Invoices: React.FC = () => {
   const handleDeleteInvoiceConfirm = async () => {
     if (!invoiceToDelete) return;
 
-    try {
-      setDeleting(true);
-      const invoiceDate = format(new Date(invoiceToDelete.date), 'dd.MM.yyyy');
-      await api.delete(`/invoices/${invoiceToDelete._id}`, {
-        data: { confirmDate: invoiceDate }
-      });
-      toast.success('Накладная удалена');
-      fetchInvoices();
-      setDeleteInvoiceModalOpen(false);
-      setInvoiceToDelete(null);
-    } catch (error) {
-      handleError(error, 'Ошибка при удалении накладной');
-    } finally {
-      setDeleting(false);
-    }
+    const invoiceDate = format(new Date(invoiceToDelete.date), 'dd.MM.yyyy');
+    await deleteInvoiceMutation.mutateAsync({
+      id: invoiceToDelete._id,
+      confirmDate: invoiceDate
+    });
+    setDeleteInvoiceModalOpen(false);
+    setInvoiceToDelete(null);
   };
 
   return (
@@ -317,7 +309,7 @@ const Invoices: React.FC = () => {
         type="invoice"
         name={invoiceToDelete ? (typeof invoiceToDelete.supplier === 'object' ? invoiceToDelete.supplier.name : '') : ''}
         confirmValue={invoiceToDelete ? format(new Date(invoiceToDelete.date), 'dd.MM.yyyy') : ''}
-        loading={deleteInvoiceMutation.isLoading}
+        loading={deleteInvoiceMutation.isPending}
       />
 
       <PhotoModal

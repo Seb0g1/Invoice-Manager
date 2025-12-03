@@ -43,7 +43,7 @@ export const useWarehouseItems = (page: number = 1, itemsPerPage: number = 50, s
         };
       }
     },
-    keepPreviousData: true, // Сохраняем предыдущие данные при переходе на новую страницу
+    placeholderData: (previousData) => previousData, // Сохраняем предыдущие данные при переходе на новую страницу
   });
 };
 

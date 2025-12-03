@@ -326,10 +326,10 @@ const Warehouse: React.FC = () => {
             color="error"
             startIcon={<DeleteIcon />}
             onClick={handleDeleteSelected}
-            disabled={deleteManyMutation.isLoading}
+            disabled={deleteManyMutation.isPending}
             size={isMobile ? "large" : "medium"}
           >
-            {deleteManyMutation.isLoading ? 'Удаление...' : 'Удалить выбранные'}
+            {deleteManyMutation.isPending ? 'Удаление...' : 'Удалить выбранные'}
           </Button>
         </Toolbar>
       )}
@@ -614,11 +614,11 @@ const Warehouse: React.FC = () => {
             />
           </DialogContent>
           <DialogActions>
-            <Button onClick={handleCloseDialog} disabled={createMutation.isLoading} size={isMobile ? "large" : "medium"}>
+            <Button onClick={handleCloseDialog} disabled={createMutation.isPending} size={isMobile ? "large" : "medium"}>
               Отмена
             </Button>
-            <Button type="submit" variant="contained" disabled={createMutation.isLoading} size={isMobile ? "large" : "medium"}>
-              {createMutation.isLoading ? <CircularProgress size={24} /> : 'Добавить'}
+            <Button type="submit" variant="contained" disabled={createMutation.isPending} size={isMobile ? "large" : "medium"}>
+              {createMutation.isPending ? <CircularProgress size={24} /> : 'Добавить'}
             </Button>
           </DialogActions>
         </form>
@@ -726,11 +726,11 @@ const Warehouse: React.FC = () => {
             />
           </DialogContent>
           <DialogActions>
-            <Button onClick={handleCloseEditDialog} disabled={updateMutation.isLoading} size={isMobile ? "large" : "medium"}>
+            <Button onClick={handleCloseEditDialog} disabled={updateMutation.isPending} size={isMobile ? "large" : "medium"}>
               Отмена
             </Button>
-            <Button type="submit" variant="contained" disabled={updateMutation.isLoading} size={isMobile ? "large" : "medium"}>
-              {updateMutation.isLoading ? <CircularProgress size={24} /> : 'Сохранить'}
+            <Button type="submit" variant="contained" disabled={updateMutation.isPending} size={isMobile ? "large" : "medium"}>
+              {updateMutation.isPending ? <CircularProgress size={24} /> : 'Сохранить'}
             </Button>
           </DialogActions>
         </form>
