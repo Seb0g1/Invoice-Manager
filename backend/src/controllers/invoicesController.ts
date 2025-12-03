@@ -9,10 +9,14 @@ import telegramService from '../services/telegramService';
 import { format } from 'date-fns';
 import fs from 'fs';
 import path from 'path';
+import { optimizeImage, deleteImageWithThumbnail } from '../utils/imageOptimizer';
 
 export const getInvoices = async (req: AuthRequest, res: Response) => {
   try {
-    const { supplier, startDate, endDate } = req.query;
+    const { supplier, startDate, endDate, page = '1', limit = '50' } = req.query;
+    const pageNum = parseInt(page as string, 10) || 1;
+    const limitNum = Math.min(parseInt(limit as string, 10) || 50, 200); // Максимум 200 на страницу
+    const skip = (pageNum - 1) * limitNum;
     
     const filter: any = {};
     
@@ -30,11 +34,27 @@ export const getInvoices = async (req: AuthRequest, res: Response) => {
       }
     }
 
+    // Получаем общее количество для пагинации
+    const total = await Invoice.countDocuments(filter);
+
+    // Получаем накладные с пагинацией
     const invoices = await Invoice.find(filter)
       .populate('supplier', 'name')
-      .sort({ date: -1 });
+      .populate('createdBy', 'login')
+      .sort({ date: -1 })
+      .skip(skip)
+      .limit(limitNum)
+      .lean();
 
-    res.json(invoices);
+    res.json({
+      items: invoices,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        totalPages: Math.ceil(total / limitNum)
+      }
+    });
   } catch (error) {
     console.error('Get invoices error:', error);
     res.status(500).json({ message: 'Ошибка сервера' });
@@ -135,20 +155,16 @@ export const deleteInvoice = async (req: AuthRequest, res: Response) => {
     const invoiceAmount = invoice.amountRUB || 0;
     const photoUrl = invoice.photoUrl;
 
-    // Удаляем файл с сервера
+    // Удаляем файл с сервера (включая превью)
     if (photoUrl) {
       try {
         // Извлекаем имя файла из пути (например, /uploads/filename.jpg -> filename.jpg)
         const filename = photoUrl.replace('/uploads/', '');
         const filePath = path.join(__dirname, '../../uploads', filename);
         
-        // Проверяем существование файла и удаляем его
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-          console.log(`Файл удалён: ${filePath}`);
-        } else {
-          console.warn(`Файл не найден: ${filePath}`);
-        }
+        // Удаляем изображение и превью
+        await deleteImageWithThumbnail(filePath);
+        console.log(`Файл удалён: ${filePath}`);
       } catch (fileError) {
         // Логируем ошибку, но не прерываем удаление накладной
         console.error('Ошибка при удалении файла:', fileError);
@@ -192,6 +208,39 @@ export const createInvoice = async (req: AuthRequest, res: Response) => {
 
     if (!req.file) {
       return res.status(400).json({ message: 'Фото накладной обязательно' });
+    }
+
+    // Оптимизируем изображение
+    const originalPath = path.join(__dirname, '../../uploads', req.file.filename);
+    const optimizedFilename = `opt_${req.file.filename}`;
+    const optimizedPath = path.join(__dirname, '../../uploads', optimizedFilename);
+    
+    let finalPhotoUrl: string;
+    try {
+      const { optimizedPath: finalPath } = await optimizeImage(
+        originalPath,
+        optimizedPath,
+        {
+          maxWidth: 1920,
+          maxHeight: 1920,
+          quality: 85,
+          format: 'jpeg',
+          createThumbnail: true,
+          thumbnailSize: 300
+        }
+      );
+
+      // Удаляем оригинальное изображение, если оно было оптимизировано
+      if (fs.existsSync(originalPath) && finalPath !== originalPath) {
+        fs.unlinkSync(originalPath);
+      }
+
+      // Используем оптимизированное изображение
+      finalPhotoUrl = `/uploads/${path.basename(finalPath)}`;
+    } catch (optimizeError) {
+      console.error('Image optimization error:', optimizeError);
+      // Используем оригинальное изображение, если оптимизация не удалась
+      finalPhotoUrl = `/uploads/${req.file.filename}`;
     }
 
     let supplier;
@@ -242,9 +291,10 @@ export const createInvoice = async (req: AuthRequest, res: Response) => {
     }
 
     const invoice = new Invoice({
-      photoUrl: `/uploads/${req.file.filename}`,
+      photoUrl: finalPhotoUrl,
       date: date ? new Date(date) : new Date(),
       supplier: supplier._id,
+      createdBy: req.userId, // Сохраняем, кто создал накладную
       type: type === 'return' ? 'return' : 'income', // Сохраняем тип накладной
       amountUSD: finalAmountUSD,
       amountRUB: finalAmountRUB,
@@ -355,6 +405,137 @@ export const createInvoice = async (req: AuthRequest, res: Response) => {
     res.status(201).json(populatedInvoice);
   } catch (error) {
     console.error('Create invoice error:', error);
+    res.status(500).json({ message: 'Ошибка сервера' });
+  }
+};
+
+/**
+ * Получить статистику по накладным
+ */
+export const getInvoiceStatistics = async (req: AuthRequest, res: Response) => {
+  try {
+    const user = await User.findById(req.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'Пользователь не найден' });
+    }
+
+    let filter: any = {};
+    
+    // Если это сборщик, показываем только его накладные
+    if (user.role === 'collector') {
+      filter.createdBy = req.userId;
+    }
+
+    // Общая статистика
+    const totalInvoices = await Invoice.countDocuments(filter);
+    const paidInvoices = await Invoice.countDocuments({ ...filter, paid: true });
+    const unpaidInvoices = await Invoice.countDocuments({ ...filter, paid: false });
+    
+    // Статистика по типам
+    const incomeInvoices = await Invoice.countDocuments({ ...filter, type: 'income' });
+    const returnInvoices = await Invoice.countDocuments({ ...filter, type: 'return' });
+
+    // Суммы
+    const invoices = await Invoice.find(filter);
+    const totalAmountRUB = invoices.reduce((sum, inv) => sum + (inv.amountRUB || 0), 0);
+    const totalAmountUSD = invoices.reduce((sum, inv) => sum + (inv.amountUSD || 0), 0);
+    const paidAmountRUB = invoices
+      .filter(inv => inv.paid)
+      .reduce((sum, inv) => sum + (inv.paidAmountRUB || inv.amountRUB || 0), 0);
+    const paidAmountUSD = invoices
+      .filter(inv => inv.paid)
+      .reduce((sum, inv) => sum + (inv.paidAmountUSD || inv.amountUSD || 0), 0);
+    const unpaidAmountRUB = totalAmountRUB - paidAmountRUB;
+    const unpaidAmountUSD = totalAmountUSD - paidAmountUSD;
+
+    // Статистика по сборщикам (только для директора)
+    let collectorsStats: Array<{
+      userId: string;
+      login: string;
+      totalInvoices: number;
+      paidInvoices: number;
+      unpaidInvoices: number;
+      totalAmountRUB: number;
+      totalAmountUSD: number;
+    }> = [];
+
+    if (user.role === 'director') {
+      const collectors = await User.find({ role: 'collector' });
+      const statsPromises = collectors.map(async (collector) => {
+        const collectorFilter = { createdBy: collector._id };
+        const collectorInvoices = await Invoice.find(collectorFilter);
+        const collectorTotal = collectorInvoices.length;
+        const collectorPaid = collectorInvoices.filter(inv => inv.paid).length;
+        const collectorUnpaid = collectorTotal - collectorPaid;
+        const collectorAmountRUB = collectorInvoices.reduce((sum, inv) => sum + (inv.amountRUB || 0), 0);
+        const collectorAmountUSD = collectorInvoices.reduce((sum, inv) => sum + (inv.amountUSD || 0), 0);
+
+        return {
+          userId: collector._id.toString(),
+          login: collector.login,
+          totalInvoices: collectorTotal,
+          paidInvoices: collectorPaid,
+          unpaidInvoices: collectorUnpaid,
+          totalAmountRUB: collectorAmountRUB,
+          totalAmountUSD: collectorAmountUSD,
+        };
+      });
+
+      collectorsStats = await Promise.all(statsPromises);
+    }
+
+    // Статистика по месяцам (последние 6 месяцев)
+    const monthlyStats: Array<{
+      month: string;
+      count: number;
+      amountRUB: number;
+      amountUSD: number;
+    }> = [];
+
+    for (let i = 5; i >= 0; i--) {
+      const date = new Date();
+      date.setMonth(date.getMonth() - i);
+      const startOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+      const endOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59);
+
+      const monthFilter = {
+        ...filter,
+        date: {
+          $gte: startOfMonth,
+          $lte: endOfMonth
+        }
+      };
+
+      const monthInvoices = await Invoice.find(monthFilter);
+      const monthCount = monthInvoices.length;
+      const monthAmountRUB = monthInvoices.reduce((sum, inv) => sum + (inv.amountRUB || 0), 0);
+      const monthAmountUSD = monthInvoices.reduce((sum, inv) => sum + (inv.amountUSD || 0), 0);
+
+      monthlyStats.push({
+        month: date.toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }),
+        count: monthCount,
+        amountRUB: monthAmountRUB,
+        amountUSD: monthAmountUSD,
+      });
+    }
+
+    res.json({
+      totalInvoices,
+      paidInvoices,
+      unpaidInvoices,
+      incomeInvoices,
+      returnInvoices,
+      totalAmountRUB,
+      totalAmountUSD,
+      paidAmountRUB,
+      paidAmountUSD,
+      unpaidAmountRUB,
+      unpaidAmountUSD,
+      collectorsStats,
+      monthlyStats,
+    });
+  } catch (error) {
+    console.error('Get invoice statistics error:', error);
     res.status(500).json({ message: 'Ошибка сервера' });
   }
 };

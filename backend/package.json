@@ -9,7 +9,8 @@
     "start": "node dist/index.js",
     "sync-ozon": "ts-node scripts/sync-ozon-products.ts",
     "check-stocks": "ts-node scripts/check-stocks-in-db.ts",
-    "generate-yandex-client": "powershell -ExecutionPolicy Bypass -File scripts/generate-yandex-client.ps1"
+    "generate-yandex-client": "powershell -ExecutionPolicy Bypass -File scripts/generate-yandex-client.ps1",
+    "get-google-token": "ts-node scripts/get-google-refresh-token.ts"
   },
   "keywords": [],
   "author": "",

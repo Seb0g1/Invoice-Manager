@@ -55,3 +55,4 @@ echo "1. Пересоздайте package-lock.json: cd backend && npm install"
 echo "2. Соберите проект: npm run build"
 echo "3. Перезапустите PM2: pm2 restart all"
 
+

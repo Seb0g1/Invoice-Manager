@@ -252,25 +252,17 @@ async function syncOzonProducts() {
   }
 }
 
-// ОТКЛЮЧЕНО: Старая функция синхронизации заменена на новую через API endpoint /api/ozon/sync
-// Новая функция использует правильную логику обработки остатков из /v4/product/info/stocks
-// setInterval(() => {
-//   syncOzonProducts();
-// }, 60 * 60 * 1000); // 1 час в миллисекундах
-
-// setTimeout(() => {
-//   syncOzonProducts();
-// }, 5 * 60 * 1000); // 5 минут
+// Автоматическая синхронизация OZON теперь выполняется через планировщик задач (schedulerService)
+// Задача настроена на ежедневный запуск в 4:00 утра
 
 app.listen(PORT, async () => {
   console.log(`🚀 Сервер запущен на порту ${PORT}`);
-  console.log('⏰ Автоматическая синхронизация OZON отключена. Используйте ручную синхронизацию через /api/ozon/sync');
   
-  // Запускаем планировщик задач для Яндекс Маркет
+  // Запускаем планировщик задач для Яндекс Маркет и OZON
   try {
     const { schedulerService } = await import('./services/schedulerService');
     await schedulerService.initialize();
-    console.log('✅ Планировщик задач Яндекс Маркет запущен');
+    console.log('✅ Планировщик задач запущен (Яндекс Маркет + OZON)');
   } catch (error: any) {
     console.error('❌ Ошибка запуска планировщика задач:', error.message);
   }

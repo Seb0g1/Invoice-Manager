@@ -4,6 +4,7 @@ export interface IInvoice extends Document {
   photoUrl: string;
   date: Date;
   supplier: mongoose.Types.ObjectId;
+  createdBy?: mongoose.Types.ObjectId; // Кто создал накладную (сборщик)
   paid: boolean;
   type: 'income' | 'return'; // Тип накладной: приход или возврат
   amountUSD?: number;
@@ -24,12 +25,19 @@ const InvoiceSchema = new Schema<IInvoice>({
   date: {
     type: Date,
     required: true,
-    default: Date.now
+    default: Date.now,
+    index: true // Индекс для сортировки и фильтрации по дате
   },
   supplier: {
     type: Schema.Types.ObjectId,
     ref: 'Supplier',
-    required: true
+    required: true,
+    index: true // Индекс для быстрого поиска по поставщику
+  },
+  createdBy: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+    index: true // Индекс для статистики по сборщикам
   },
   paid: {
     type: Boolean,

@@ -12,7 +12,8 @@ import {
   Warehouse as WarehouseIcon,
   ShoppingCart as ShoppingCartIcon,
   Store as StoreIcon,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  TrendingUp as TrendingUpIcon
 } from '@mui/icons-material';
 import { useAuthStore } from '../store/authStore';
 import { useThemeContext } from '../contexts/ThemeContext';
@@ -36,6 +37,7 @@ const MobileBottomNav: React.FC = () => {
   const getCurrentValue = () => {
     if (location.pathname.startsWith('/suppliers')) return '/suppliers';
     if (location.pathname.startsWith('/invoices')) return '/invoices';
+    if (location.pathname.startsWith('/statistics')) return '/statistics';
     if (location.pathname.startsWith('/picking-lists')) return '/picking-lists';
     if (location.pathname.startsWith('/warehouse')) return '/warehouse';
     if (location.pathname.startsWith('/yandex') || location.pathname.startsWith('/yandex-market') || location.pathname.startsWith('/price-control')) return 'yandex';
@@ -120,6 +122,13 @@ const MobileBottomNav: React.FC = () => {
             label="Накладные"
             icon={<ReceiptIcon />}
             value="/invoices"
+          />
+        )}
+        {isPageVisible(['director', 'collector']) && (
+          <BottomNavigationAction
+            label="Статистика"
+            icon={<TrendingUpIcon />}
+            value="/statistics"
           />
         )}
         {isPageVisible(['director', 'collector']) && (

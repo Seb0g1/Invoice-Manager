@@ -149,3 +149,5 @@ npx @openapitools/openapi-generator-cli generate -i "https://raw.githubuserconte
 
 Однако этот способ может быть менее надежным, так как зависит от доступности GitHub.
 
+
+

@@ -28,6 +28,7 @@ import { User } from '../types';
 import { useThemeContext } from '../contexts/ThemeContext';
 import DeleteConfirmModal from '../components/DeleteConfirmModal';
 import toast from 'react-hot-toast';
+import { handleError } from '../utils/errorHandler';
 
 const Users: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
@@ -57,7 +58,7 @@ const Users: React.FC = () => {
       const response = await api.get('/users');
       setUsers(response.data);
     } catch (error) {
-      toast.error('Ошибка при загрузке пользователей');
+      handleError(error, 'Ошибка при загрузке пользователей');
     } finally {
       setLoading(false);
     }
@@ -82,8 +83,8 @@ const Users: React.FC = () => {
       toast.success('Пользователь создан');
       handleCloseDialog();
       fetchUsers();
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Ошибка при создании пользователя');
+    } catch (error) {
+      handleError(error, 'Ошибка при создании пользователя');
     } finally {
       setSubmitting(false);
     }
@@ -129,8 +130,8 @@ const Users: React.FC = () => {
       toast.success('Пользователь обновлён');
       handleCloseEditDialog();
       fetchUsers();
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Ошибка при обновлении пользователя');
+    } catch (error) {
+      handleError(error, 'Ошибка при обновлении пользователя');
     } finally {
       setSubmitting(false);
     }
@@ -156,8 +157,8 @@ const Users: React.FC = () => {
       fetchUsers();
       setDeleteModalOpen(false);
       setUserToDelete(null);
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Ошибка при удалении пользователя');
+    } catch (error) {
+      handleError(error, 'Ошибка при удалении пользователя');
     } finally {
       setDeleting(false);
     }

@@ -86,6 +86,7 @@ router.delete('/suppliers/:id', authMiddleware, roleMiddleware(['director']), su
 
 // Invoices routes
 router.get('/invoices', authMiddleware, invoicesController.getInvoices);
+router.get('/invoices/statistics', authMiddleware, invoicesController.getInvoiceStatistics);
 router.post('/invoices', authMiddleware, upload.single('photo'), invoicesController.createInvoice);
 router.delete('/invoices/:id', authMiddleware, roleMiddleware(['director']), invoicesController.deleteInvoice);
 
@@ -111,6 +112,7 @@ router.get('/warehouse/:id', authMiddleware, warehouseController.getWarehouseIte
 router.post('/warehouse', authMiddleware, warehouseController.createWarehouseItem);
 router.put('/warehouse/:id', authMiddleware, warehouseController.updateWarehouseItem);
 router.delete('/warehouse/:id', authMiddleware, warehouseController.deleteWarehouseItem);
+router.delete('/warehouse', authMiddleware, warehouseController.deleteWarehouseItems);
 router.post('/warehouse/import', authMiddleware, excelUpload.single('excelFile'), warehouseController.importWarehouseItems);
 
 // OZON routes
@@ -162,6 +164,7 @@ router.post('/yandex-market/businesses/:id/test', authMiddleware, roleMiddleware
 
 // Синхронизация (Market Yandex Go)
 router.post('/yandex-market-go/sync/products', authMiddleware, roleMiddleware(['director']), yandexMarketGoController.syncAllProducts);
+router.get('/yandex-market-go/sync/progress', authMiddleware, roleMiddleware(['director']), yandexMarketGoController.getSyncProgress);
 router.post('/yandex-market-go/sync/stocks', authMiddleware, roleMiddleware(['director']), yandexMarketGoController.syncStocks);
 router.post('/yandex-market-go/sync/prices', authMiddleware, roleMiddleware(['director']), yandexMarketGoController.syncPrices);
 
@@ -171,9 +174,11 @@ router.post('/yandex-market/sync/stocks', authMiddleware, roleMiddleware(['direc
 router.post('/yandex-market/sync/prices', authMiddleware, roleMiddleware(['director']), yandexMarketController.syncPrices);
 
 // Работа с товарами (Market Yandex Go)
+router.get('/yandex-market-go/businesses', authMiddleware, yandexBusinessController.getBusinesses);
 router.get('/yandex-market-go/products', authMiddleware, yandexMarketGoController.getAllProducts);
 router.get('/yandex-market-go/products/search', authMiddleware, yandexMarketGoController.searchProducts);
 router.get('/yandex-market-go/products/:vendorCode', authMiddleware, yandexMarketGoController.getProductByVendorCode);
+router.get('/yandex-market-go/businesses/:businessId/products', authMiddleware, yandexMarketGoController.getBusinessProducts);
 router.post('/yandex-market-go/products/update-price', authMiddleware, roleMiddleware(['director']), yandexMarketGoController.updatePriceInAllBusinesses);
 router.post('/yandex-market-go/products/update-name', authMiddleware, roleMiddleware(['director']), yandexMarketGoController.updateProductName);
 

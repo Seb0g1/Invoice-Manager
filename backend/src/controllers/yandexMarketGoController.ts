@@ -5,6 +5,21 @@ import { YandexProduct } from '../models/YandexProduct';
 import { YandexProductBusinessLink } from '../models/YandexProductBusinessLink';
 import { AuthRequest } from '../middleware/auth';
 
+// Глобальное хранилище прогресса синхронизации
+let syncProgressState: {
+  current: number;
+  total: number;
+  stage: string;
+  status: 'processing' | 'completed' | 'error';
+  result?: {
+    total: number;
+    synced: number;
+    errors: number;
+    businessesProcessed: number;
+  };
+  error?: string;
+} | null = null;
+
 /**
  * Полная синхронизация всех товаров из всех бизнесов
  */
@@ -17,56 +32,273 @@ export const syncAllProducts = async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ message: 'Нет активных бизнесов для синхронизации' });
     }
 
-    let totalSynced = 0;
-    const errors: Array<{ businessId: string; error: string }> = [];
+    // Инициализируем прогресс
+    syncProgressState = {
+      current: 0,
+      total: 0,
+      stage: 'Инициализация...',
+      status: 'processing',
+    };
 
-    // Синхронизируем каждый бизнес
-    for (const business of businesses) {
+    // Отправляем ответ сразу, чтобы не блокировать запрос
+    res.json({
+      message: 'Синхронизация запущена',
+      status: 'processing',
+    });
+
+    // Получаем лимит из query параметров или используем значение по умолчанию
+    const maxOffersPerBusiness = req.query.maxOffers 
+      ? parseInt(req.query.maxOffers.toString()) 
+      : 1000000; // По умолчанию 1,000,000 товаров (практически без ограничений)
+
+    // Запускаем синхронизацию асинхронно
+    (async () => {
       try {
-        console.log(`[YandexMarketGo] Начало синхронизации бизнеса ${business.businessId} (${business.name})`);
+        let totalSynced = 0;
+        let totalProducts = 0;
+        const errors: Array<{ businessId: string; error: string }> = [];
+        const startTime = Date.now();
 
-        // Загружаем все офферы
-        const offerMappings = await yandexMarketGoService.getOfferMappings(
-          business.businessId,
-          (current, total, stage) => {
-            console.log(`[YandexMarketGo] ${business.businessId}: ${stage}`);
-          }
-        );
+        // Синхронизируем каждый бизнес
+        for (let businessIndex = 0; businessIndex < businesses.length; businessIndex++) {
+          const business = businesses[businessIndex];
+          try {
+            const businessProgress = `Бизнес ${businessIndex + 1}/${businesses.length}: ${business.name}`;
+            syncProgressState = {
+              current: totalSynced,
+              total: totalProducts || businesses.length * maxOffersPerBusiness,
+              stage: `${businessProgress} - Загрузка офферов...`,
+              status: 'processing',
+            };
 
-        console.log(`[YandexMarketGo] Загружено ${offerMappings.length} офферов для бизнеса ${business.businessId}`);
+            console.log(`[YandexMarketGo] Начало синхронизации бизнеса ${business.businessId} (${business.name}), лимит: ${maxOffersPerBusiness}`);
 
-        // Обрабатываем каждый оффер батчами
-        const batchSize = 100;
-        for (let i = 0; i < offerMappings.length; i += batchSize) {
-          const batch = offerMappings.slice(i, i + batchSize);
+            // Загружаем офферы с лимитом
+            let offerMappings: any[] = [];
+            try {
+              offerMappings = await yandexMarketGoService.getOfferMappings(
+                business.businessId,
+                (current, total, stage) => {
+                  syncProgressState = {
+                    current: totalSynced,
+                    total: totalProducts || total,
+                    stage: `${businessProgress} - ${stage}`,
+                    status: 'processing',
+                  };
+                  console.log(`[YandexMarketGo] ${business.businessId}: ${stage}`);
+                },
+                maxOffersPerBusiness // Передаем лимит
+              );
+            } catch (offerError: any) {
+              console.error(`[YandexMarketGo] Ошибка загрузки офферов для бизнеса ${business.businessId}:`, offerError.message);
+              errors.push({
+                businessId: business.businessId,
+                error: offerError.message || 'Ошибка загрузки офферов',
+              });
+              continue; // Пропускаем этот бизнес и продолжаем со следующим
+            }
 
-          for (const offer of batch) {
-            if (!offer.vendorCode) {
-              // Пропускаем офферы без артикула
+            totalProducts = Math.max(totalProducts, offerMappings.length);
+            console.log(`[YandexMarketGo] Загружено ${offerMappings.length} офферов для бизнеса ${business.businessId}`);
+
+            if (offerMappings.length === 0) {
+              console.warn(`[YandexMarketGo] Нет офферов для бизнеса ${business.businessId}, пропускаем`);
               continue;
             }
 
+            // Получаем offerIds для запроса информации о карточках и остатках
+            // Нормализуем offerIds (убираем пробелы в начале/конце) для совпадения с ключами в stocksMap
+            const offerIds = offerMappings
+              .map(offer => offer.offerId?.trim())
+              .filter(id => id && id.length > 0);
+
+            // Получаем информацию о карточках товаров (название, изображения и т.д.)
+            console.log(`[YandexMarketGo] Загрузка информации о карточках для ${offerIds.length} товаров...`);
+            syncProgressState = {
+              current: totalSynced,
+              total: totalProducts,
+              stage: `${businessProgress} - Загрузка информации о карточках...`,
+              status: 'processing',
+            };
+            
+            let offerCardsMap: Map<string, any>;
+            try {
+              offerCardsMap = await yandexMarketGoService.getOfferCards(
+                business.businessId,
+                offerIds,
+                (current, total, stage) => {
+                  syncProgressState = {
+                    current: totalSynced,
+                    total: totalProducts,
+                    stage: `${businessProgress} - ${stage}`,
+                    status: 'processing',
+                  };
+                }
+              );
+              console.log(`[YandexMarketGo] Загружено карточек: ${offerCardsMap.size}`);
+            } catch (cardsError: any) {
+              console.warn(`[YandexMarketGo] Ошибка загрузки карточек: ${cardsError.message}, продолжаем без них`);
+              offerCardsMap = new Map();
+            }
+
+            // Получаем остатки товаров
+            console.log(`[YandexMarketGo] Загрузка остатков для ${offerIds.length} товаров...`);
+            console.log(`[YandexMarketGo] Первые 10 offerIds:`, offerIds.slice(0, 10));
+            syncProgressState = {
+              current: totalSynced,
+              total: totalProducts,
+              stage: `${businessProgress} - Загрузка остатков...`,
+              status: 'processing',
+            };
+            
+            let stocksMap: Map<string, { available: number; reserved: number }>;
+            try {
+              stocksMap = await yandexMarketGoService.getStocks(
+                business.businessId,
+                offerIds,
+                (current, total, stage) => {
+                  syncProgressState = {
+                    current: totalSynced,
+                    total: totalProducts,
+                    stage: `${businessProgress} - ${stage}`,
+                    status: 'processing',
+                  };
+                }
+              );
+              console.log(`[YandexMarketGo] Загружено остатков: ${stocksMap.size} из ${offerIds.length}`);
+              if (stocksMap.size > 0) {
+                // Логируем примеры остатков
+                const firstStock = Array.from(stocksMap.entries())[0];
+                console.log(`[YandexMarketGo] Пример остатка: offerId=${firstStock[0]}, available=${firstStock[1].available}, reserved=${firstStock[1].reserved}`);
+                // Логируем все ключи в stocksMap (первые 20)
+                console.log(`[YandexMarketGo] Первые 20 ключей в stocksMap:`, Array.from(stocksMap.keys()).slice(0, 20));
+              } else {
+                console.warn(`[YandexMarketGo] Не получено ни одного остатка для ${offerIds.length} товаров!`);
+                console.warn(`[YandexMarketGo] Возможно, API не возвращает остатки или они в другом формате`);
+              }
+            } catch (stocksError: any) {
+              console.error(`[YandexMarketGo] Ошибка загрузки остатков: ${stocksError.message}`);
+              console.error(`[YandexMarketGo] Stack:`, stocksError.stack);
+              console.error(`[YandexMarketGo] Response data:`, stocksError.response?.data);
+              stocksMap = new Map();
+            }
+
+            // Обрабатываем каждый оффер батчами
+            const batchSize = 100;
+            let offersWithVendorCode = 0;
+            let offersWithoutVendorCode = 0;
+            
+            for (let i = 0; i < offerMappings.length; i += batchSize) {
+              const batch = offerMappings.slice(i, i + batchSize);
+
+              for (const offer of batch) {
+            // В новом API offerId = SKU = vendorCode (идентификатор товара)
+            // Пробуем разные варианты получения артикула
+            const vendorCode = offer.vendorCode || 
+                              offer.offerId || // В новом API это основной идентификатор
+                              offer.marketSku?.toString();
+            
+            if (!vendorCode) {
+              // Пропускаем офферы без артикула
+              offersWithoutVendorCode++;
+              console.debug(`[YandexMarketGo] Пропущен оффер ${offer.offerId || 'unknown'} без артикула`);
+              continue;
+            }
+            
+            offersWithVendorCode++;
+
+            // Получаем информацию о карточке товара
+            const offerCard = offerCardsMap.get(offer.offerId);
+            
+            // Нормализуем ключи для поиска (убираем пробелы в начале/конце)
+            const normalizedOfferId = offer.offerId?.trim();
+            const normalizedVendorCode = vendorCode?.trim();
+            
+            // Пробуем найти остаток по offerId, если не найдено - пробуем по vendorCode
+            let stockInfo = stocksMap.get(normalizedOfferId) || stocksMap.get(normalizedVendorCode) || { available: 0, reserved: 0 };
+            
+            // Если не нашли, пробуем найти по всем ключам с учетом возможных различий в форматировании
+            if (stockInfo.available === 0 && stockInfo.reserved === 0 && stocksMap.size > 0) {
+              // Ищем по частичному совпадению (если offerId содержит vendorCode или наоборот)
+              for (const [key, value] of stocksMap.entries()) {
+                const normalizedKey = key.trim();
+                if (normalizedKey === normalizedOfferId || normalizedKey === normalizedVendorCode) {
+                  stockInfo = value;
+                  break;
+                }
+                // Проверяем, содержит ли ключ offerId или vendorCode (или наоборот)
+                if (normalizedOfferId && (normalizedKey.includes(normalizedOfferId) || normalizedOfferId.includes(normalizedKey))) {
+                  stockInfo = value;
+                  break;
+                }
+                if (normalizedVendorCode && (normalizedKey.includes(normalizedVendorCode) || normalizedVendorCode.includes(normalizedKey))) {
+                  stockInfo = value;
+                  break;
+                }
+              }
+            }
+            
+            // Логируем, если остаток не найден (только для первых нескольких товаров для отладки)
+            if (offersWithVendorCode <= 10 && stockInfo.available === 0 && stockInfo.reserved === 0 && stocksMap.size > 0) {
+              console.log(`[YandexMarketGo] Остаток не найден для offerId="${normalizedOfferId}", vendorCode="${normalizedVendorCode}"`);
+              console.log(`[YandexMarketGo] Типы: offerId type=${typeof normalizedOfferId}, vendorCode type=${typeof normalizedVendorCode}`);
+              console.log(`[YandexMarketGo] Длины: offerId length=${normalizedOfferId?.length}, vendorCode length=${normalizedVendorCode?.length}`);
+              
+              // Показываем первые несколько ключей с их типами и длинами
+              const sampleKeys = Array.from(stocksMap.keys()).slice(0, 5);
+              console.log(`[YandexMarketGo] Примеры ключей в stocksMap:`, sampleKeys.map(k => ({
+                key: k,
+                type: typeof k,
+                length: k?.length,
+                matchesOfferId: k === normalizedOfferId,
+                matchesVendorCode: k === normalizedVendorCode
+              })));
+            }
+
+            // Определяем название товара
+            // Приоритет: offerCard.mapping.marketSkuName > offer.name > offerId
+            let productName = offerCard?.mapping?.marketSkuName;
+            if (!productName || !productName.trim()) {
+              productName = offer.name && offer.name.trim() ? offer.name : undefined;
+            }
+            if (!productName || !productName.trim()) {
+              productName = offer.offerId || vendorCode || 'Товар без названия';
+            }
+
+            // Определяем изображения
+            // В offerCard нет изображений напрямую, используем из offer если есть
+            const images = offer.pictures || [];
+
+            // Определяем категорию
+            const category = offerCard?.mapping?.marketCategoryName || offer.category;
+
             // Находим или создаем товар по артикулу
-            let product = await YandexProduct.findOne({ vendorCode: offer.vendorCode });
+            let product = await YandexProduct.findOne({ vendorCode: vendorCode });
 
             if (!product) {
               // Создаем новый товар
               product = new YandexProduct({
-                vendorCode: offer.vendorCode,
-                name: offer.name || '',
+                vendorCode: vendorCode,
+                name: productName,
                 description: offer.description,
-                images: offer.pictures || [],
-                category: offer.category,
+                images: images,
+                category: category,
               });
               await product.save();
             } else {
               // Обновляем данные товара (берем самые свежие)
-              if (offer.name) product.name = offer.name;
-              if (offer.description) product.description = offer.description;
-              if (offer.pictures && offer.pictures.length > 0) {
-                product.images = offer.pictures;
+              // Обновляем название только если оно не пустое и не является артикулом
+              if (productName && productName.trim() && productName !== vendorCode && productName !== offer.offerId) {
+                product.name = productName;
+              } else if (!product.name || product.name.trim() === '' || product.name === vendorCode) {
+                // Если у товара нет названия или оно равно артикулу, обновляем
+                product.name = productName;
               }
-              if (offer.category) product.category = offer.category;
+              if (offer.description) product.description = offer.description;
+              if (images.length > 0) {
+                product.images = images;
+              }
+              if (category) product.category = category;
               await product.save();
             }
 
@@ -81,56 +313,152 @@ export const syncAllProducts = async (req: AuthRequest, res: Response) => {
                 productId: product._id,
                 businessId: business.businessId,
                 offerId: offer.offerId,
-                sku: offer.marketSku?.toString() || '',
+                sku: offerCard?.mapping?.marketSku?.toString() || offer.marketSku?.toString() || '',
                 price: offer.pricing?.value ? parseFloat(offer.pricing.value) : 0,
-                stock: { available: 0 },
+                stock: {
+                  available: stockInfo.available,
+                  reserved: stockInfo.reserved,
+                },
                 status: offer.status || offer.availability,
                 lastSync: new Date(),
               });
             } else {
               // Обновляем связь
               link.offerId = offer.offerId;
-              link.sku = offer.marketSku?.toString() || link.sku;
+              link.sku = offerCard?.mapping?.marketSku?.toString() || offer.marketSku?.toString() || link.sku;
               link.status = offer.status || offer.availability || link.status;
               if (offer.pricing?.value) {
                 link.price = parseFloat(offer.pricing.value);
               }
+              link.stock = {
+                available: stockInfo.available,
+                reserved: stockInfo.reserved,
+              };
               link.lastSync = new Date();
             }
 
-            await link.save();
-            totalSynced++;
-          }
+            // Не логируем каждый товар без остатка, чтобы не засорять логи
 
-          // Задержка между батчами
-          if (i + batchSize < offerMappings.length) {
-            await new Promise(resolve => setTimeout(resolve, 200));
+                await link.save();
+                totalSynced++;
+                
+                // Обновляем прогресс
+                syncProgressState = {
+                  current: totalSynced,
+                  total: totalProducts,
+                  stage: `${businessProgress} - Обработано: ${totalSynced}`,
+                  status: 'processing',
+                };
+              }
+
+              // Задержка между батчами
+              if (i + batchSize < offerMappings.length) {
+                await new Promise(resolve => setTimeout(resolve, 200));
+              }
+            }
+
+            // Обновляем время последней синхронизации бизнеса
+            business.lastSyncAt = new Date();
+            await business.save();
+
+            // Подсчитываем товары с остатками
+            const linksWithStock = await YandexProductBusinessLink.countDocuments({
+              businessId: business.businessId,
+              'stock.available': { $gt: 0 },
+            });
+            
+            console.log(`[YandexMarketGo] Бизнес ${business.businessId} синхронизирован:`);
+            console.log(`  - Всего офферов: ${offerMappings.length}`);
+            console.log(`  - С артикулом: ${offersWithVendorCode}`);
+            console.log(`  - Без артикула: ${offersWithoutVendorCode}`);
+            console.log(`  - Синхронизировано товаров: ${totalSynced}`);
+            console.log(`  - Товаров с остатками: ${linksWithStock}`);
+            console.log(`  - Загружено остатков из API: ${stocksMap.size}`);
+          } catch (error: any) {
+            console.error(`[YandexMarketGo] Ошибка синхронизации бизнеса ${business.businessId}:`, error.message);
+            errors.push({
+              businessId: business.businessId,
+              error: error.message,
+            });
           }
         }
 
-        // Обновляем время последней синхронизации бизнеса
-        business.lastSyncAt = new Date();
-        await business.save();
+        const duration = Math.round((Date.now() - startTime) / 1000);
 
-        console.log(`[YandexMarketGo] Бизнес ${business.businessId} синхронизирован: ${totalSynced} товаров`);
+        // Завершаем синхронизацию
+        syncProgressState = {
+          current: totalSynced,
+          total: totalProducts,
+          stage: 'Синхронизация завершена',
+          status: errors.length === 0 ? 'completed' : 'error',
+          result: {
+            total: totalProducts,
+            synced: totalSynced,
+            errors: errors.length,
+            businessesProcessed: businesses.length,
+          },
+          error: errors.length > 0 ? `Ошибки в ${errors.length} бизнесах` : undefined,
+        };
+
+        console.log(`[YandexMarketGo] Синхронизация завершена: ${totalSynced} товаров за ${duration}с`);
       } catch (error: any) {
-        console.error(`[YandexMarketGo] Ошибка синхронизации бизнеса ${business.businessId}:`, error.message);
-        errors.push({
-          businessId: business.businessId,
-          error: error.message,
-        });
+        console.error('[YandexMarketGo] Критическая ошибка синхронизации:', error);
+        console.error('[YandexMarketGo] Stack trace:', error.stack);
+        syncProgressState = {
+          current: 0,
+          total: 0,
+          stage: 'Ошибка синхронизации',
+          status: 'error',
+          error: error.message || 'Неизвестная ошибка',
+        };
       }
+    })();
+  } catch (error: any) {
+    console.error('[YandexMarketGo] Ошибка запуска синхронизации:', error);
+    console.error('[YandexMarketGo] Stack trace:', error.stack);
+    res.status(500).json({ 
+      message: error.message || 'Ошибка запуска синхронизации',
+      error: error.toString(),
+    });
+  }
+};
+
+/**
+ * Получить прогресс синхронизации
+ */
+export const getSyncProgress = async (req: AuthRequest, res: Response) => {
+  try {
+    if (!syncProgressState) {
+      return res.json({
+        status: 'idle',
+        message: 'Синхронизация не запущена',
+      });
     }
 
-    res.json({
-      success: errors.length === 0,
-      totalSynced,
-      businessesProcessed: businesses.length,
-      errors: errors.length > 0 ? errors : undefined,
-    });
+    const response = {
+      status: syncProgressState.status,
+      progress: {
+        current: syncProgressState.current,
+        total: syncProgressState.total,
+        stage: syncProgressState.stage,
+      },
+      result: syncProgressState.result,
+      error: syncProgressState.error,
+    };
+
+    // Очищаем состояние через 5 минут после завершения/ошибки
+    if ((syncProgressState.status === 'completed' || syncProgressState.status === 'error') && syncProgressState.result) {
+      setTimeout(() => {
+        syncProgressState = null;
+      }, 5 * 60 * 1000);
+    }
+
+    res.json(response);
   } catch (error: any) {
-    console.error('[YandexMarketGo] Ошибка полной синхронизации:', error);
-    res.status(500).json({ message: error.message || 'Ошибка синхронизации товаров' });
+    console.error('[YandexMarketGo] Ошибка получения прогресса:', error);
+    res.status(500).json({
+      message: error.message || 'Ошибка при получении прогресса синхронизации'
+    });
   }
 };
 
@@ -607,10 +935,11 @@ export const searchProducts = async (req: AuthRequest, res: Response) => {
 
 /**
  * Получить все товары с пагинацией
+ * Поддерживает фильтрацию по businessId
  */
 export const getAllProducts = async (req: AuthRequest, res: Response) => {
   try {
-    const { page = 1, limit = 50, search } = req.query;
+    const { page = 1, limit = 50, search, businessId } = req.query;
     const pageNum = parseInt(page.toString());
     const limitNum = Math.min(parseInt(limit.toString()), 100);
     const skip = (pageNum - 1) * limitNum;
@@ -621,6 +950,26 @@ export const getAllProducts = async (req: AuthRequest, res: Response) => {
         { vendorCode: { $regex: search, $options: 'i' } },
         { name: { $regex: search, $options: 'i' } },
       ];
+    }
+
+    // Если указан businessId, фильтруем товары по бизнесу
+    let productIds: any[] = [];
+    if (businessId && typeof businessId === 'string') {
+      const links = await YandexProductBusinessLink.find({ businessId });
+      productIds = links.map(link => link.productId);
+      if (productIds.length === 0) {
+        // Нет товаров для этого бизнеса
+        return res.json({
+          products: [],
+          pagination: {
+            page: pageNum,
+            limit: limitNum,
+            total: 0,
+            totalPages: 0,
+          },
+        });
+      }
+      query._id = { $in: productIds };
     }
 
     const [products, total] = await Promise.all([
@@ -634,7 +983,10 @@ export const getAllProducts = async (req: AuthRequest, res: Response) => {
     // Загружаем связи с бизнесами для каждого товара
     const productsWithBusinesses = await Promise.all(
       products.map(async (product) => {
-        const links = await YandexProductBusinessLink.find({ productId: product._id });
+        const links = businessId 
+          ? await YandexProductBusinessLink.find({ productId: product._id, businessId })
+          : await YandexProductBusinessLink.find({ productId: product._id });
+        
         const businessIds = [...new Set(links.map(l => l.businessId))];
         const businesses = await YandexBusiness.find({ businessId: { $in: businessIds } });
         const businessMap = new Map(businesses.map(b => [b.businessId, b]));
@@ -673,6 +1025,111 @@ export const getAllProducts = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error('[YandexMarketGo] Ошибка получения товаров:', error);
     res.status(500).json({ message: error.message || 'Ошибка получения товаров' });
+  }
+};
+
+/**
+ * Получить товары конкретного бизнеса
+ */
+export const getBusinessProducts = async (req: AuthRequest, res: Response) => {
+  try {
+    const { businessId } = req.params;
+    const { page = 1, limit = 50, search } = req.query;
+    const pageNum = parseInt(page.toString());
+    const limitNum = Math.min(parseInt(limit.toString()), 100);
+    const skip = (pageNum - 1) * limitNum;
+
+    // Проверяем, что бизнес существует
+    const business = await YandexBusiness.findOne({ businessId });
+    if (!business) {
+      return res.status(404).json({ message: 'Бизнес не найден' });
+    }
+
+    // Находим все связи товаров с этим бизнесом
+    const linksQuery: any = { businessId };
+    const links = await YandexProductBusinessLink.find(linksQuery);
+    const productIds = links.map(link => link.productId);
+
+    if (productIds.length === 0) {
+      return res.json({
+        products: [],
+        business: {
+          businessId: business.businessId,
+          name: business.name,
+        },
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total: 0,
+          totalPages: 0,
+        },
+      });
+    }
+
+    // Формируем запрос для товаров
+    const query: any = { _id: { $in: productIds } };
+    if (search && typeof search === 'string' && search.trim()) {
+      query.$or = [
+        { vendorCode: { $regex: search, $options: 'i' } },
+        { name: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    const [products, total] = await Promise.all([
+      YandexProduct.find(query)
+        .skip(skip)
+        .limit(limitNum)
+        .sort({ name: 1 }),
+      YandexProduct.countDocuments(query),
+    ]);
+
+    // Загружаем связи с бизнесами для каждого товара (только для текущего бизнеса)
+    const productsWithBusinesses = await Promise.all(
+      products.map(async (product) => {
+        const link = await YandexProductBusinessLink.findOne({ 
+          productId: product._id, 
+          businessId 
+        });
+
+        if (!link) {
+          return null;
+        }
+
+        return {
+          id: product._id,
+          vendorCode: product.vendorCode,
+          name: product.name,
+          description: product.description,
+          images: product.images,
+          category: product.category,
+          business: {
+            businessId: link.businessId,
+            businessName: business.name,
+            offerId: link.offerId,
+            price: link.price,
+            stock: link.stock,
+            status: link.status,
+          },
+        };
+      })
+    );
+
+    res.json({
+      products: productsWithBusinesses.filter(p => p !== null),
+      business: {
+        businessId: business.businessId,
+        name: business.name,
+      },
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        totalPages: Math.ceil(total / limitNum),
+      },
+    });
+  } catch (error: any) {
+    console.error('[YandexMarketGo] Ошибка получения товаров бизнеса:', error);
+    res.status(500).json({ message: error.message || 'Ошибка получения товаров бизнеса' });
   }
 };
 

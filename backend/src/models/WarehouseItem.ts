@@ -14,6 +14,7 @@ const WarehouseItemSchema = new Schema<IWarehouseItem>({
     type: String,
     required: true,
     trim: true,
+    index: true, // Индекс для быстрого поиска
   },
   quantity: {
     type: Number,
@@ -23,6 +24,7 @@ const WarehouseItemSchema = new Schema<IWarehouseItem>({
   article: {
     type: String,
     trim: true,
+    index: true, // Индекс для быстрого поиска по артикулу
   },
   price: {
     type: Number,
@@ -32,6 +34,9 @@ const WarehouseItemSchema = new Schema<IWarehouseItem>({
 }, {
   timestamps: true
 });
+
+// Составной индекс для поиска по имени и артикулу
+WarehouseItemSchema.index({ name: 'text', article: 'text' });
 
 export default mongoose.model<IWarehouseItem>('WarehouseItem', WarehouseItemSchema);
 

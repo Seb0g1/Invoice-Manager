@@ -1,98 +1,47 @@
 #!/bin/bash
 
-echo "========================================"
-echo "Загрузка проекта в GitHub"
-echo "========================================"
-echo ""
+# Скрипт для загрузки проекта на GitHub (Linux/Mac)
+# Использование: ./upload-to-github.sh
 
-# Проверка наличия Git
+echo "🚀 Подготовка проекта к загрузке на GitHub..."
+
+# Проверка наличия git
 if ! command -v git &> /dev/null; then
-    echo "[ОШИБКА] Git не установлен!"
-    echo ""
-    echo "Установите Git:"
-    echo "  Ubuntu/Debian: sudo apt install git"
-    echo "  macOS: brew install git"
+    echo "❌ Git не установлен. Установите Git и повторите попытку."
     exit 1
 fi
 
-echo "[✓] Git найден"
-echo ""
-
-# Проверка, инициализирован ли репозиторий
+# Проверка, инициализирован ли git
 if [ ! -d .git ]; then
-    echo "[1/7] Инициализация Git репозитория..."
+    echo "🔧 Инициализация git репозитория..."
     git init
-    if [ $? -ne 0 ]; then
-        echo "[ОШИБКА] Не удалось инициализировать репозиторий"
-        exit 1
-    fi
-    echo "[✓] Репозиторий инициализирован"
-else
-    echo "[✓] Репозиторий уже инициализирован"
 fi
-echo ""
 
-echo "[2/7] Добавление файлов..."
+# Добавление всех файлов
+echo "📦 Добавление файлов в git..."
 git add .
-if [ $? -ne 0 ]; then
-    echo "[ОШИБКА] Не удалось добавить файлы"
-    exit 1
-fi
-echo "[✓] Файлы добавлены"
-echo ""
 
-echo "[3/7] Создание коммита..."
-git commit -m "first commit"
-if [ $? -ne 0 ]; then
-    echo "[ПРЕДУПРЕЖДЕНИЕ] Возможно, нет изменений для коммита"
-fi
-echo ""
-
-echo "[4/7] Переименование ветки в main..."
-git branch -M main
-if [ $? -ne 0 ]; then
-    echo "[ПРЕДУПРЕЖДЕНИЕ] Ветка уже называется main"
-fi
-echo ""
-
-echo "[5/7] Проверка удалённого репозитория..."
-if ! git remote get-url origin &> /dev/null; then
-    echo "[6/7] Добавление удалённого репозитория..."
-    git remote add origin https://github.com/Seb0g1/Invoice-Manager.git
-    if [ $? -ne 0 ]; then
-        echo "[ОШИБКА] Не удалось добавить удалённый репозиторий"
-        exit 1
-    fi
-    echo "[✓] Удалённый репозиторий добавлен"
+# Проверка статуса
+if [ -n "$(git status --short)" ]; then
+    echo "📝 Файлы для коммита:"
+    git status --short
+    
+    # Создание коммита
+    echo "💾 Создание коммита..."
+    git commit -m "Initial commit: David Warehouse - система управления складом и накладными"
+    
+    echo "✅ Коммит создан успешно!"
 else
-    echo "[✓] Удалённый репозиторий уже настроен"
-fi
-echo ""
-
-echo "[7/7] Загрузка проекта в GitHub..."
-echo ""
-echo "ВНИМАНИЕ: Вам может потребоваться ввести логин и пароль GitHub"
-echo "Или использовать Personal Access Token вместо пароля"
-echo ""
-git push -u origin main
-if [ $? -ne 0 ]; then
-    echo ""
-    echo "[ОШИБКА] Не удалось загрузить проект"
-    echo ""
-    echo "Возможные причины:"
-    echo "1. Репозиторий не создан на GitHub"
-    echo "2. Неверные учётные данные"
-    echo "3. Репозиторий уже содержит файлы (используйте --force или сначала сделайте pull)"
-    echo ""
-    exit 1
+    echo "ℹ️  Нет изменений для коммита. Все файлы уже закоммичены."
 fi
 
 echo ""
-echo "========================================"
-echo "[✓] Проект успешно загружен в GitHub!"
-echo "========================================"
+echo "📤 Следующие шаги для загрузки на GitHub:"
+echo "1. Создайте репозиторий на GitHub.com"
+echo "2. Выполните команды:"
 echo ""
-echo "Репозиторий: https://github.com/Seb0g1/Invoice-Manager"
+echo "   git remote add origin https://github.com/YOUR_USERNAME/david-warehouse.git"
+echo "   git branch -M main"
+echo "   git push -u origin main"
 echo ""
-
-
+echo "📖 Подробная инструкция: GITHUB_UPLOAD_INSTRUCTIONS.md"

@@ -1,4 +1,5 @@
-import axios from 'axios';
+import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+import { handleError, getErrorMessage } from '../utils/errorHandler';
 
 const api = axios.create({
   baseURL: '/api',
@@ -8,10 +9,59 @@ const api = axios.create({
   }
 });
 
-// Interceptor для обработки ошибок
+// Retry логика для запросов
+const retryRequest = async (error: AxiosError, retryCount = 0): Promise<any> => {
+  const config = error.config as InternalAxiosRequestConfig & { _retry?: boolean; _retryCount?: number };
+  const maxRetries = 3;
+  const retryDelay = 1000; // 1 секунда
+
+  // Не повторяем запросы, которые уже были повторены
+  if (config._retry) {
+    return Promise.reject(error);
+  }
+
+  // Повторяем только для определенных ошибок
+  const shouldRetry = 
+    (!error.response || 
+     error.response.status >= 500 || 
+     error.response.status === 429 || 
+     error.code === 'ECONNABORTED' || 
+     error.code === 'ETIMEDOUT' ||
+     !error.response) && // Сетевые ошибки
+    retryCount < maxRetries;
+
+  if (shouldRetry) {
+    config._retry = true;
+    config._retryCount = (config._retryCount || 0) + 1;
+
+    // Экспоненциальная задержка: 1s, 2s, 4s
+    const delay = retryDelay * Math.pow(2, retryCount);
+    
+    await new Promise(resolve => setTimeout(resolve, delay));
+
+    // Повторяем запрос
+    return api.request(config);
+  }
+
+  return Promise.reject(error);
+};
+
+// Interceptor для обработки ошибок с retry
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    const config = error.config as InternalAxiosRequestConfig & { _retry?: boolean; _retryCount?: number };
+    
+    // Пробуем повторить запрос для сетевых ошибок и ошибок сервера
+    if (config && !config._retry) {
+      try {
+        return await retryRequest(error, config._retryCount || 0);
+      } catch (retryError) {
+        // Если retry не помог, продолжаем с обычной обработкой ошибок
+      }
+    }
+
+    // Обычная обработка ошибок
     if (error.response?.status === 401) {
       // Перенаправление на страницу входа при 401, но только если:
       // 1. Не на странице входа
@@ -46,13 +96,19 @@ api.interceptors.response.use(
       // Это нормально, пользователь просто не авторизован
     } else if (error.response?.status === 403) {
       // Ошибка доступа
-      console.error('Доступ запрещён:', error.response?.data?.message);
+      const message = getErrorMessage(error);
+      console.error('Доступ запрещён:', message);
+      // Не показываем toast для 403, так как это может быть ожидаемое поведение
     } else if (error.response?.status >= 500) {
       // Ошибка сервера
-      console.error('Ошибка сервера:', error.response?.data?.message);
+      const message = getErrorMessage(error);
+      console.error('Ошибка сервера:', message);
+      // Toast будет показан в компонентах при необходимости
     } else if (!error.response) {
       // Нет ответа от сервера (сеть)
-      console.error('Ошибка сети:', error.message);
+      const message = getErrorMessage(error);
+      console.error('Ошибка сети:', message);
+      // Toast будет показан в компонентах при необходимости
     }
     return Promise.reject(error);
   }

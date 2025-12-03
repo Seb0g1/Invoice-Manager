@@ -15,7 +15,9 @@ import YandexPriceUpdate from '../pages/YandexPriceUpdate';
 import YandexBusinesses from '../pages/YandexBusinesses';
 import YandexMarketProducts from '../pages/YandexMarketProducts';
 import YandexMarketStats from '../pages/YandexMarketStats';
+import YandexBusinessProducts from '../pages/YandexBusinessProducts';
 import Settings from '../pages/Settings';
+import Statistics from '../pages/Statistics';
 import NotFound from '../pages/NotFound';
 import PageLoader from './PageLoader';
 
@@ -91,6 +93,14 @@ const AppRoutes: React.FC = () => {
         element={
           <ProtectedRoute 
             element={<Invoices />} 
+            allowedRoles={['director', 'collector']}
+          />} 
+      />
+      <Route 
+        path="/statistics" 
+        element={
+          <ProtectedRoute 
+            element={<Statistics />} 
             allowedRoles={['director', 'collector']}
           />} 
       />
@@ -177,6 +187,14 @@ const AppRoutes: React.FC = () => {
         element={
           <ProtectedRoute 
             element={<YandexMarketStats />} 
+            allowedRoles={['director']}
+          />} 
+      />
+      <Route 
+        path="/yandex-market/businesses/:businessId/products" 
+        element={
+          <ProtectedRoute 
+            element={<YandexBusinessProducts />} 
             allowedRoles={['director']}
           />} 
       />

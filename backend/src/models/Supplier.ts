@@ -10,7 +10,9 @@ const SupplierSchema = new Schema<ISupplier>({
   name: {
     type: String,
     required: true,
-    trim: true
+    trim: true,
+    index: true, // Индекс для быстрого поиска
+    unique: true // Уникальность названия поставщика
   },
   balance: {
     type: Number,

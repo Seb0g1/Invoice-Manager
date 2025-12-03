@@ -5,7 +5,11 @@ import * as XLSX from 'xlsx';
 
 export const getWarehouseItems = async (req: AuthRequest, res: Response) => {
   try {
-    const { search } = req.query;
+    const { search, page = '1', limit = '50' } = req.query;
+    const pageNum = parseInt(page as string, 10) || 1;
+    const limitNum = Math.min(parseInt(limit as string, 10) || 50, 200); // Максимум 200 на страницу
+    const skip = (pageNum - 1) * limitNum;
+
     const filter: any = {};
 
     if (search) {
@@ -15,8 +19,25 @@ export const getWarehouseItems = async (req: AuthRequest, res: Response) => {
       ];
     }
 
-    const items = await WarehouseItem.find(filter).sort({ name: 1 });
-    res.json(items);
+    // Получаем общее количество для пагинации
+    const total = await WarehouseItem.countDocuments(filter);
+
+    // Получаем товары с пагинацией
+    const items = await WarehouseItem.find(filter)
+      .sort({ name: 1 })
+      .skip(skip)
+      .limit(limitNum)
+      .lean();
+
+    res.json({
+      items,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        totalPages: Math.ceil(total / limitNum)
+      }
+    });
   } catch (error) {
     console.error('Get warehouse items error:', error);
     res.status(500).json({ message: 'Ошибка сервера' });
@@ -109,6 +130,29 @@ export const deleteWarehouseItem = async (req: AuthRequest, res: Response) => {
     res.json({ message: 'Товар успешно удалён' });
   } catch (error) {
     console.error('Delete warehouse item error:', error);
+    res.status(500).json({ message: 'Ошибка сервера' });
+  }
+};
+
+/**
+ * Массовое удаление товаров
+ */
+export const deleteWarehouseItems = async (req: AuthRequest, res: Response) => {
+  try {
+    const { ids } = req.body;
+
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ message: 'Необходимо указать массив ID товаров для удаления' });
+    }
+
+    const result = await WarehouseItem.deleteMany({ _id: { $in: ids } });
+    
+    res.json({ 
+      message: `Удалено товаров: ${result.deletedCount}`,
+      deletedCount: result.deletedCount
+    });
+  } catch (error) {
+    console.error('Delete warehouse items error:', error);
     res.status(500).json({ message: 'Ошибка сервера' });
   }
 };

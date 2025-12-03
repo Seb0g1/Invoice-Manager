@@ -35,48 +35,43 @@ const MobileNavDrawer: React.FC<MobileNavDrawerProps> = ({ open, onClose, catego
   const { user } = useAuthStore();
   const { theme } = useThemeContext();
   const [yandexAccounts, setYandexAccounts] = useState<any[]>([]);
+  const [yandexBusinesses, setYandexBusinesses] = useState<any[]>([]);
 
-  // Загружаем аккаунты Yandex
+  // Загружаем аккаунты Yandex и бизнесы
   useEffect(() => {
-    const fetchYandexAccounts = async () => {
+    const fetchYandexData = async () => {
       if (user?.role === 'director') {
         try {
-          const response = await api.get('/yandex/accounts');
-          setYandexAccounts(response.data || []);
+          const [accountsResponse, businessesResponse] = await Promise.all([
+            api.get('/yandex/accounts').catch(() => ({ data: [] })),
+            api.get('/yandex-market/businesses').catch(() => ({ data: { businesses: [] } })),
+          ]);
+          setYandexAccounts(Array.isArray(accountsResponse.data) ? accountsResponse.data : []);
+          // Обрабатываем разные форматы ответа для бизнесов
+          const businessesData = businessesResponse.data;
+          if (Array.isArray(businessesData)) {
+            setYandexBusinesses(businessesData);
+          } else if (businessesData?.businesses && Array.isArray(businessesData.businesses)) {
+            setYandexBusinesses(businessesData.businesses);
+          } else {
+            setYandexBusinesses([]);
+          }
         } catch (error) {
-          console.error('Error fetching Yandex accounts:', error);
+          console.error('Error fetching Yandex data:', error);
         }
       }
     };
     if (open && category === 'yandex') {
-      fetchYandexAccounts();
+      fetchYandexData();
     }
   }, [open, category, user]);
 
 
   const yandexSubItems = [
     {
-      text: 'Общие товары',
-      icon: <ListIcon />,
-      path: '/yandex',
-      roles: ['director']
-    },
-    {
-      text: 'Все товары (Market)',
+      text: 'Все товары',
       icon: <ListIcon />,
       path: '/yandex-market/products',
-      roles: ['director']
-    },
-    {
-      text: 'Управление ценами',
-      icon: <EditIcon />,
-      path: '/price-control',
-      roles: ['director']
-    },
-    {
-      text: 'Обновление цен (Go)',
-      icon: <EditIcon />,
-      path: '/price-update',
       roles: ['director']
     },
     {
@@ -95,6 +90,12 @@ const MobileNavDrawer: React.FC<MobileNavDrawerProps> = ({ open, onClose, catego
       text: account.name || `Аккаунт ${index + 1}`,
       icon: <StoreIcon />,
       path: `/yandex?accountId=${account._id}`,
+      roles: ['director'] as string[]
+    })),
+    ...yandexBusinesses.filter(b => b.enabled).map((business) => ({
+      text: business.name || `Бизнес ${business.businessId}`,
+      icon: <StoreIcon />,
+      path: `/yandex-market/businesses/${business.businessId}/products`,
       roles: ['director'] as string[]
     }))
   ];

@@ -8,7 +8,8 @@ import { AuthRequest } from '../middleware/auth';
 export const getBusinesses = async (req: AuthRequest, res: Response) => {
   try {
     const businesses = await YandexBusiness.find({}).sort({ name: 1 });
-    res.json(businesses);
+    // Возвращаем в формате, который ожидает фронтенд
+    res.json({ businesses });
   } catch (error: any) {
     console.error('[YandexBusiness] Ошибка получения бизнесов:', error);
     res.status(500).json({ message: error.message || 'Ошибка получения бизнесов' });
@@ -130,15 +131,22 @@ export const testBusinessConnection = async (req: AuthRequest, res: Response) =>
       return res.status(400).json({ message: 'AccessToken не настроен' });
     }
 
-    // Пробуем получить список офферов (первая страница)
+    // Используем метод тестирования, который делает только один запрос
     const { yandexMarketGoService } = await import('../services/yandexMarketGoService');
-    const offers = await yandexMarketGoService.getOfferMappings(business.businessId);
+    const testResult = await yandexMarketGoService.testConnection(business.businessId);
 
-    res.json({
-      success: true,
-      message: 'Подключение успешно',
-      offersCount: offers.length,
-    });
+    if (testResult.success) {
+      res.json({
+        success: true,
+        message: testResult.message || 'Подключение успешно',
+        offersCount: testResult.offersCount || 0,
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        message: testResult.message || 'Ошибка подключения к API',
+      });
+    }
   } catch (error: any) {
     console.error('[YandexBusiness] Ошибка тестирования подключения:', error);
     res.status(500).json({

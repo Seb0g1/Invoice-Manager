@@ -18,7 +18,13 @@ import {
   CircularProgress,
   useMediaQuery,
   IconButton,
-  InputAdornment
+  InputAdornment,
+  Checkbox,
+  Toolbar,
+  Pagination,
+  FormControl,
+  Select,
+  MenuItem
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -28,88 +34,113 @@ import {
   Search as SearchIcon,
   Clear as ClearIcon
 } from '@mui/icons-material';
+import { useForm, Controller } from 'react-hook-form';
+import { yupResolver } from '@hookform/resolvers/yup';
 import api from '../services/api';
 import { WarehouseItem } from '../types';
 import { useThemeContext } from '../contexts/ThemeContext';
 import toast from 'react-hot-toast';
+import { handleError } from '../utils/errorHandler';
+import { warehouseItemSchema, WarehouseItemFormData } from '../utils/validation';
+import SkeletonLoader from '../components/SkeletonLoader';
+import { 
+  useWarehouseItems, 
+  useCreateWarehouseItem, 
+  useUpdateWarehouseItem, 
+  useDeleteWarehouseItem,
+  useDeleteWarehouseItems 
+} from '../hooks/useWarehouseItems';
+import { useDebounce } from '../utils/debounce';
 
 const Warehouse: React.FC = () => {
-  const [items, setItems] = useState<WarehouseItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<WarehouseItem | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [formData, setFormData] = useState({
-    name: '',
-    quantity: '',
-    article: '',
-    price: ''
+  const [page, setPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(50);
+  
+  // React Query hooks
+  const { data, isLoading, error } = useWarehouseItems(page, itemsPerPage, searchTerm);
+  const createMutation = useCreateWarehouseItem();
+  const updateMutation = useUpdateWarehouseItem();
+  const deleteMutation = useDeleteWarehouseItem();
+  const deleteManyMutation = useDeleteWarehouseItems();
+  
+  const items = data?.items || [];
+  const totalPages = data?.pagination?.totalPages || 1;
+  const totalItems = data?.pagination?.total || 0;
+  const loading = isLoading;
+  
+  // React Hook Form для создания
+  const {
+    control: createControl,
+    handleSubmit: handleCreateSubmit,
+    reset: resetCreate,
+    formState: { errors: createErrors }
+  } = useForm<WarehouseItemFormData>({
+    resolver: yupResolver(warehouseItemSchema),
+    defaultValues: {
+      name: '',
+      quantity: null,
+      article: null,
+      price: null
+    }
   });
-  const [submitting, setSubmitting] = useState(false);
-  const [importing, setImporting] = useState(false);
+
+  // React Hook Form для редактирования
+  const {
+    control: editControl,
+    handleSubmit: handleEditSubmit,
+    reset: resetEdit,
+    formState: { errors: editErrors }
+  } = useForm<WarehouseItemFormData>({
+    resolver: yupResolver(warehouseItemSchema),
+    defaultValues: {
+      name: '',
+      quantity: null,
+      article: null,
+      price: null
+    }
+  });
+  const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const { theme } = useThemeContext();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   useEffect(() => {
-    fetchItems();
-  }, []);
-
-  const fetchItems = async () => {
-    try {
-      setLoading(true);
-      const response = await api.get('/warehouse', {
-        params: searchTerm ? { search: searchTerm } : {}
-      });
-      setItems(response.data);
-    } catch (error) {
-      toast.error('Ошибка при загрузке товаров');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      fetchItems();
-    }, 300);
-    return () => clearTimeout(timeoutId);
-  }, [searchTerm]);
+    setPage(1); // Сбрасываем на первую страницу при поиске
+  }, [debouncedSearchTerm]);
 
   const handleOpenDialog = () => {
+    resetCreate();
     setDialogOpen(true);
-    setFormData({ name: '', quantity: '', article: '', price: '' });
   };
 
   const handleCloseDialog = () => {
     setDialogOpen(false);
-    setFormData({ name: '', quantity: '', article: '', price: '' });
+    resetCreate();
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
-
-    try {
-      await api.post('/warehouse', formData);
-      toast.success('Товар добавлен');
-      handleCloseDialog();
-      fetchItems();
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Ошибка при добавлении товара');
-    } finally {
-      setSubmitting(false);
-    }
+  const handleCreate = async (data: WarehouseItemFormData) => {
+    const payload = {
+      name: data.name,
+      quantity: data.quantity ?? undefined,
+      article: data.article ?? undefined,
+      price: data.price ?? undefined
+    };
+    
+    await createMutation.mutateAsync(payload);
+    handleCloseDialog();
   };
 
   const handleEdit = (item: WarehouseItem) => {
     setEditingItem(item);
-    setFormData({
+    resetEdit({
       name: item.name,
-      quantity: item.quantity?.toString() || '',
-      article: item.article || '',
-      price: item.price?.toString() || ''
+      quantity: item.quantity ?? null,
+      article: item.article ?? null,
+      price: item.price ?? null
     });
     setEditDialogOpen(true);
   };
@@ -117,24 +148,21 @@ const Warehouse: React.FC = () => {
   const handleCloseEditDialog = () => {
     setEditDialogOpen(false);
     setEditingItem(null);
-    setFormData({ name: '', quantity: '', article: '', price: '' });
+    resetEdit();
   };
 
-  const handleUpdate = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleUpdate = async (data: WarehouseItemFormData) => {
     if (!editingItem) return;
 
-    setSubmitting(true);
-    try {
-      await api.put(`/warehouse/${editingItem._id}`, formData);
-      toast.success('Товар обновлён');
-      handleCloseEditDialog();
-      fetchItems();
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Ошибка при обновлении товара');
-    } finally {
-      setSubmitting(false);
-    }
+    const payload = {
+      name: data.name,
+      quantity: data.quantity ?? undefined,
+      article: data.article ?? undefined,
+      price: data.price ?? undefined
+    };
+    
+    await updateMutation.mutateAsync({ id: editingItem._id, data: payload });
+    handleCloseEditDialog();
   };
 
   const handleDelete = async (id: string) => {
@@ -142,13 +170,38 @@ const Warehouse: React.FC = () => {
       return;
     }
 
-    try {
-      await api.delete(`/warehouse/${id}`);
-      toast.success('Товар удалён');
-      fetchItems();
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Ошибка при удалении товара');
+    await deleteMutation.mutateAsync(id);
+  };
+
+  const handleSelectAll = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (event.target.checked) {
+      setSelectedItems(filteredItems.map(item => item._id));
+    } else {
+      setSelectedItems([]);
     }
+  };
+
+  const handleSelectItem = (id: string) => {
+    setSelectedItems(prev => 
+      prev.includes(id) 
+        ? prev.filter(itemId => itemId !== id)
+        : [...prev, id]
+    );
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedItems.length === 0) return;
+    
+    const confirmMessage = selectedItems.length === 1
+      ? 'Вы уверены, что хотите удалить выбранный товар?'
+      : `Вы уверены, что хотите удалить ${selectedItems.length} товаров?`;
+    
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    await deleteManyMutation.mutateAsync(selectedItems);
+    setSelectedItems([]);
   };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -168,9 +221,10 @@ const Warehouse: React.FC = () => {
 
       toast.success('Товары успешно импортированы');
       setImportDialogOpen(false);
-      fetchItems();
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Ошибка при импорте товаров');
+      // Инвалидируем кэш для обновления списка
+      queryClient.invalidateQueries({ queryKey: ['warehouseItems'] });
+    } catch (error) {
+      handleError(error, 'Ошибка при импорте товаров');
     } finally {
       setImporting(false);
       // Сброс input
@@ -178,14 +232,8 @@ const Warehouse: React.FC = () => {
     }
   };
 
-  const filteredItems = items.filter(item => {
-    if (!searchTerm) return true;
-    const searchLower = searchTerm.toLowerCase();
-    return (
-      item.name.toLowerCase().includes(searchLower) ||
-      item.article?.toLowerCase().includes(searchLower)
-    );
-  });
+  // Фильтрация теперь на сервере, но оставляем для обратной совместимости
+  const filteredItems = items;
 
   return (
     <Box sx={{ p: { xs: 1.5, sm: 2, md: 3 } }}>
@@ -251,6 +299,37 @@ const Warehouse: React.FC = () => {
         }}
       />
 
+      {selectedItems.length > 0 && (
+        <Toolbar
+          sx={{
+            pl: { sm: 2 },
+            pr: { xs: 1, sm: 1 },
+            bgcolor: 'action.selected',
+            borderRadius: 1,
+            mb: 2
+          }}
+        >
+          <Typography
+            sx={{ flex: '1 1 100%' }}
+            color="inherit"
+            variant="subtitle1"
+            component="div"
+          >
+            Выбрано: {selectedItems.length}
+          </Typography>
+          <Button
+            variant="contained"
+            color="error"
+            startIcon={<DeleteIcon />}
+            onClick={handleDeleteSelected}
+            disabled={deleteManyMutation.isLoading}
+            size={isMobile ? "large" : "medium"}
+          >
+            {deleteManyMutation.isLoading ? 'Удаление...' : 'Удалить выбранные'}
+          </Button>
+        </Toolbar>
+      )}
+
       <TableContainer 
         component={Paper}
         sx={{
@@ -263,6 +342,13 @@ const Warehouse: React.FC = () => {
         <Table size={isMobile ? "small" : "medium"}>
           <TableHead>
             <TableRow>
+              <TableCell padding="checkbox">
+                <Checkbox
+                  indeterminate={selectedItems.length > 0 && selectedItems.length < filteredItems.length}
+                  checked={filteredItems.length > 0 && selectedItems.length === filteredItems.length}
+                  onChange={handleSelectAll}
+                />
+              </TableCell>
               <TableCell>Наименование</TableCell>
               <TableCell align="right">Кол-во</TableCell>
               <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>Артикул</TableCell>
@@ -275,14 +361,18 @@ const Warehouse: React.FC = () => {
           </TableHead>
           <TableBody>
             {loading ? (
-              <TableRow>
-                <TableCell colSpan={isMobile ? 3 : 5} align="center">
-                  <CircularProgress />
-                </TableCell>
-              </TableRow>
+              <>
+                {Array.from({ length: itemsPerPage }).map((_, index) => (
+                  <TableRow key={index}>
+                    <TableCell colSpan={isMobile ? 4 : 6}>
+                      <SkeletonLoader variant="text" rows={1} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </>
             ) : filteredItems.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={isMobile ? 3 : 5} align="center">
+                <TableCell colSpan={isMobile ? 4 : 6} align="center">
                   <Typography color="text.secondary">
                     Товары не найдены
                   </Typography>
@@ -290,7 +380,13 @@ const Warehouse: React.FC = () => {
               </TableRow>
             ) : (
               filteredItems.map((item) => (
-                <TableRow key={item._id} hover>
+                <TableRow key={item._id} hover selected={selectedItems.includes(item._id)}>
+                  <TableCell padding="checkbox">
+                    <Checkbox
+                      checked={selectedItems.includes(item._id)}
+                      onChange={() => handleSelectItem(item._id)}
+                    />
+                  </TableCell>
                   <TableCell>
                     <Typography variant="body2" sx={{ fontWeight: 600 }}>
                       {item.name}
@@ -369,73 +465,156 @@ const Warehouse: React.FC = () => {
         </Table>
       </TableContainer>
 
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <Box sx={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          gap: 2, 
+          mt: 3, 
+          flexWrap: 'wrap' 
+        }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              Показано {(page - 1) * itemsPerPage + 1}-{Math.min(page * itemsPerPage, totalItems)} из {totalItems}
+            </Typography>
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+            <FormControl size="small" sx={{ minWidth: 120 }}>
+              <Select
+                value={itemsPerPage}
+                onChange={(e) => {
+                  setItemsPerPage(Number(e.target.value));
+                  setPage(1);
+                }}
+              >
+                <MenuItem value={25}>25</MenuItem>
+                <MenuItem value={50}>50</MenuItem>
+                <MenuItem value={100}>100</MenuItem>
+                <MenuItem value={200}>200</MenuItem>
+              </Select>
+            </FormControl>
+            <Pagination
+              count={totalPages}
+              page={page}
+              onChange={(_event, value) => setPage(value)}
+              color="primary"
+              size={isMobile ? "small" : "medium"}
+              showFirstButton
+              showLastButton
+            />
+          </Box>
+        </Box>
+      )}
+
       {/* Create Dialog */}
       <Dialog open={dialogOpen} onClose={handleCloseDialog} maxWidth="sm" fullWidth fullScreen={isMobile}>
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleCreateSubmit(handleCreate)}>
           <DialogTitle>Добавить товар</DialogTitle>
           <DialogContent>
-            <TextField
-              fullWidth
-              label="Наименование *"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              margin="normal"
-              required
-              InputProps={{
-                style: { textTransform: 'none' }
-              }}
-              inputProps={{
-                style: { textTransform: 'none' }
-              }}
+            <Controller
+              name="name"
+              control={createControl}
+              render={({ field }) => (
+                <TextField
+                  {...field}
+                  fullWidth
+                  label="Наименование *"
+                  margin="normal"
+                  required
+                  error={!!createErrors.name}
+                  helperText={createErrors.name?.message}
+                  InputProps={{
+                    style: { textTransform: 'none' }
+                  }}
+                  inputProps={{
+                    style: { textTransform: 'none' }
+                  }}
+                />
+              )}
             />
-            <TextField
-              fullWidth
-              label="Кол-во"
-              type="number"
-              value={formData.quantity}
-              onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
-              margin="normal"
-              InputProps={{
-                style: { textTransform: 'none' }
-              }}
-              inputProps={{
-                style: { textTransform: 'none' }
-              }}
+            <Controller
+              name="quantity"
+              control={createControl}
+              render={({ field }) => (
+                <TextField
+                  {...field}
+                  fullWidth
+                  label="Кол-во"
+                  type="number"
+                  margin="normal"
+                  value={field.value ?? ''}
+                  onChange={(e) => {
+                    const value = e.target.value === '' ? null : parseFloat(e.target.value);
+                    field.onChange(value);
+                  }}
+                  error={!!createErrors.quantity}
+                  helperText={createErrors.quantity?.message}
+                  InputProps={{
+                    style: { textTransform: 'none' }
+                  }}
+                  inputProps={{
+                    style: { textTransform: 'none' }
+                  }}
+                />
+              )}
             />
-            <TextField
-              fullWidth
-              label="Артикул"
-              value={formData.article}
-              onChange={(e) => setFormData({ ...formData, article: e.target.value })}
-              margin="normal"
-              InputProps={{
-                style: { textTransform: 'none' }
-              }}
-              inputProps={{
-                style: { textTransform: 'none' }
-              }}
+            <Controller
+              name="article"
+              control={createControl}
+              render={({ field }) => (
+                <TextField
+                  {...field}
+                  fullWidth
+                  label="Артикул"
+                  margin="normal"
+                  value={field.value ?? ''}
+                  onChange={(e) => field.onChange(e.target.value || null)}
+                  error={!!createErrors.article}
+                  helperText={createErrors.article?.message}
+                  InputProps={{
+                    style: { textTransform: 'none' }
+                  }}
+                  inputProps={{
+                    style: { textTransform: 'none' }
+                  }}
+                />
+              )}
             />
-            <TextField
-              fullWidth
-              label="Цена"
-              type="number"
-              value={formData.price}
-              onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-              margin="normal"
-              InputProps={{
-                style: { textTransform: 'none' }
-              }}
-              inputProps={{
-                style: { textTransform: 'none' }
-              }}
+            <Controller
+              name="price"
+              control={createControl}
+              render={({ field }) => (
+                <TextField
+                  {...field}
+                  fullWidth
+                  label="Цена"
+                  type="number"
+                  margin="normal"
+                  value={field.value ?? ''}
+                  onChange={(e) => {
+                    const value = e.target.value === '' ? null : parseFloat(e.target.value);
+                    field.onChange(value);
+                  }}
+                  error={!!createErrors.price}
+                  helperText={createErrors.price?.message}
+                  InputProps={{
+                    style: { textTransform: 'none' }
+                  }}
+                  inputProps={{
+                    style: { textTransform: 'none' }
+                  }}
+                />
+              )}
             />
           </DialogContent>
           <DialogActions>
-            <Button onClick={handleCloseDialog} disabled={submitting} size={isMobile ? "large" : "medium"}>
+            <Button onClick={handleCloseDialog} disabled={createMutation.isLoading} size={isMobile ? "large" : "medium"}>
               Отмена
             </Button>
-            <Button type="submit" variant="contained" disabled={submitting} size={isMobile ? "large" : "medium"}>
-              {submitting ? <CircularProgress size={24} /> : 'Добавить'}
+            <Button type="submit" variant="contained" disabled={createMutation.isLoading} size={isMobile ? "large" : "medium"}>
+              {createMutation.isLoading ? <CircularProgress size={24} /> : 'Добавить'}
             </Button>
           </DialogActions>
         </form>
@@ -443,71 +622,111 @@ const Warehouse: React.FC = () => {
 
       {/* Edit Dialog */}
       <Dialog open={editDialogOpen} onClose={handleCloseEditDialog} maxWidth="sm" fullWidth fullScreen={isMobile}>
-        <form onSubmit={handleUpdate}>
+        <form onSubmit={handleEditSubmit(handleUpdate)}>
           <DialogTitle>Редактировать товар</DialogTitle>
           <DialogContent>
-            <TextField
-              fullWidth
-              label="Наименование *"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              margin="normal"
-              required
-              InputProps={{
-                style: { textTransform: 'none' }
-              }}
-              inputProps={{
-                style: { textTransform: 'none' }
-              }}
+            <Controller
+              name="name"
+              control={editControl}
+              render={({ field }) => (
+                <TextField
+                  {...field}
+                  fullWidth
+                  label="Наименование *"
+                  margin="normal"
+                  required
+                  error={!!editErrors.name}
+                  helperText={editErrors.name?.message}
+                  InputProps={{
+                    style: { textTransform: 'none' }
+                  }}
+                  inputProps={{
+                    style: { textTransform: 'none' }
+                  }}
+                />
+              )}
             />
-            <TextField
-              fullWidth
-              label="Кол-во"
-              type="number"
-              value={formData.quantity}
-              onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
-              margin="normal"
-              InputProps={{
-                style: { textTransform: 'none' }
-              }}
-              inputProps={{
-                style: { textTransform: 'none' }
-              }}
+            <Controller
+              name="quantity"
+              control={editControl}
+              render={({ field }) => (
+                <TextField
+                  {...field}
+                  fullWidth
+                  label="Кол-во"
+                  type="number"
+                  margin="normal"
+                  value={field.value ?? ''}
+                  onChange={(e) => {
+                    const value = e.target.value === '' ? null : parseFloat(e.target.value);
+                    field.onChange(value);
+                  }}
+                  error={!!editErrors.quantity}
+                  helperText={editErrors.quantity?.message}
+                  InputProps={{
+                    style: { textTransform: 'none' }
+                  }}
+                  inputProps={{
+                    style: { textTransform: 'none' }
+                  }}
+                />
+              )}
             />
-            <TextField
-              fullWidth
-              label="Артикул"
-              value={formData.article}
-              onChange={(e) => setFormData({ ...formData, article: e.target.value })}
-              margin="normal"
-              InputProps={{
-                style: { textTransform: 'none' }
-              }}
-              inputProps={{
-                style: { textTransform: 'none' }
-              }}
+            <Controller
+              name="article"
+              control={editControl}
+              render={({ field }) => (
+                <TextField
+                  {...field}
+                  fullWidth
+                  label="Артикул"
+                  margin="normal"
+                  value={field.value ?? ''}
+                  onChange={(e) => field.onChange(e.target.value || null)}
+                  error={!!editErrors.article}
+                  helperText={editErrors.article?.message}
+                  InputProps={{
+                    style: { textTransform: 'none' }
+                  }}
+                  inputProps={{
+                    style: { textTransform: 'none' }
+                  }}
+                />
+              )}
             />
-            <TextField
-              fullWidth
-              label="Цена"
-              type="number"
-              value={formData.price}
-              onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-              margin="normal"
-              InputProps={{
-                style: { textTransform: 'none' }
-              }}
-              inputProps={{
-                style: { textTransform: 'none' }
-              }}
+            <Controller
+              name="price"
+              control={editControl}
+              render={({ field }) => (
+                <TextField
+                  {...field}
+                  fullWidth
+                  label="Цена"
+                  type="number"
+                  margin="normal"
+                  value={field.value ?? ''}
+                  onChange={(e) => {
+                    const value = e.target.value === '' ? null : parseFloat(e.target.value);
+                    field.onChange(value);
+                  }}
+                  error={!!editErrors.price}
+                  helperText={editErrors.price?.message}
+                  InputProps={{
+                    style: { textTransform: 'none' }
+                  }}
+                  inputProps={{
+                    style: { textTransform: 'none' }
+                  }}
+                />
+              )}
             />
           </DialogContent>
           <DialogActions>
-            <Button onClick={handleCloseEditDialog} disabled={submitting} size={isMobile ? "large" : "medium"}>
+            <Button onClick={handleCloseEditDialog} disabled={updateMutation.isLoading} size={isMobile ? "large" : "medium"}>
               Отмена
             </Button>
-            <Button type="submit" variant="contained" disabled={submitting} size={isMobile ? "large" : "medium"}>
-              {submitting ? <CircularProgress size={24} /> : 'Сохранить'}
+            <Button type="submit" variant="contained" disabled={updateMutation.isLoading} size={isMobile ? "large" : "medium"}>
+              {updateMutation.isLoading ? <CircularProgress size={24} /> : 'Сохранить'}
             </Button>
           </DialogActions>
         </form>

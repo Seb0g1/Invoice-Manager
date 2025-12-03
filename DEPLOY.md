@@ -67,6 +67,25 @@ nano .env
 
 Вставьте следующее содержимое (замените JWT_SECRET на случайную строку):
 
+**Вариант 1: MongoDB на том же сервере (рекомендуется для небольших проектов)**
+```env
+MONGO_URI=mongodb://localhost:27017/invoice-db
+JWT_SECRET=ваш-секретный-ключ-минимум-32-символа-измените-это
+PORT=5000
+FRONTEND_URL=https://david.sakoo.ru
+NODE_ENV=production
+```
+
+**Вариант 2: MongoDB с аутентификацией (для продакшена)**
+```env
+MONGO_URI=mongodb://invoice_user:ваш-пароль@localhost:27017/invoice-db?authSource=invoice-db
+JWT_SECRET=ваш-секретный-ключ-минимум-32-символа-измените-это
+PORT=5000
+FRONTEND_URL=https://david.sakoo.ru
+NODE_ENV=production
+```
+
+**Вариант 3: Внешний MongoDB сервер (если используете облачный)**
 ```env
 MONGO_URI=mongodb://gen_user:_*W%264xFfUJP9%2BO@147.45.175.217:27017/default_db?authSource=admin&directConnection=true
 JWT_SECRET=ваш-секретный-ключ-минимум-32-символа-измените-это
@@ -74,6 +93,8 @@ PORT=5000
 FRONTEND_URL=https://david.sakoo.ru
 NODE_ENV=production
 ```
+
+**📖 Подробная инструкция по установке MongoDB на сервере:** см. `MONGODB_LOCAL_SETUP.md`
 
 Сохраните файл (Ctrl+O, Enter, Ctrl+X).
 

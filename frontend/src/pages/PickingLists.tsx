@@ -44,6 +44,9 @@ import { PickingList, PickingListItem, Supplier, WarehouseItem } from '../types'
 import { useThemeContext } from '../contexts/ThemeContext';
 import DeleteConfirmModal from '../components/DeleteConfirmModal';
 import toast from 'react-hot-toast';
+import { handleError } from '../utils/errorHandler';
+import SkeletonLoader from '../components/SkeletonLoader';
+import { useDebounce } from '../utils/debounce';
 
 const PickingLists: React.FC = () => {
   const { theme, mode } = useThemeContext();
@@ -61,10 +64,13 @@ const PickingLists: React.FC = () => {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<PickingListItem | null>(null);
   const [newListDate, setNewListDate] = useState<Date | null>(new Date());
+  const [newListName, setNewListName] = useState<string>('');
+  const [createGoogleSheet, setCreateGoogleSheet] = useState<boolean>(false);
   const [excelFile, setExcelFile] = useState<File | null>(null);
   const [filterDate, setFilterDate] = useState<string>('');
   const [filterSupplier, setFilterSupplier] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
   const [deleteItemModalOpen, setDeleteItemModalOpen] = useState(false);
   const [deleteListModalOpen, setDeleteListModalOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<PickingListItem | null>(null);
@@ -96,7 +102,7 @@ const PickingLists: React.FC = () => {
         setSelectedList(response.data[0]);
       }
     } catch (error) {
-      toast.error('Ошибка при загрузке листов сборки');
+      handleError(error, 'Ошибка при загрузке листов сборки');
     } finally {
       setLoading(false);
     }
@@ -108,7 +114,7 @@ const PickingLists: React.FC = () => {
       const response = await api.get(`/picking-lists/${listId}`);
       setItems(response.data.items || []);
     } catch (error) {
-      toast.error('Ошибка при загрузке элементов');
+      handleError(error, 'Ошибка при загрузке элементов');
     } finally {
       setItemsLoading(false);
     }
@@ -125,16 +131,35 @@ const PickingLists: React.FC = () => {
 
   const handleCreateList = async () => {
     try {
+      if (createGoogleSheet && !newListName.trim()) {
+        toast.error('Введите название для Google таблицы');
+        return;
+      }
+
       const response = await api.post('/picking-lists', {
-        date: newListDate?.toISOString() || new Date().toISOString()
+        date: newListDate?.toISOString() || new Date().toISOString(),
+        name: newListName.trim() || undefined,
+        createGoogleSheet: createGoogleSheet
       });
+      
       toast.success('Лист сборки создан');
+      
+      // Если создана Google таблица, открываем её
+      if (response.data.googleSheetUrl) {
+        toast.success('Google таблица создана! Переход...', { duration: 3000 });
+        setTimeout(() => {
+          window.open(response.data.googleSheetUrl, '_blank');
+        }, 500);
+      }
+      
       setCreateDialogOpen(false);
       setNewListDate(new Date());
+      setNewListName('');
+      setCreateGoogleSheet(false);
       await fetchPickingLists();
       setSelectedList(response.data);
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Ошибка при создании листа');
+    } catch (error) {
+      handleError(error, 'Ошибка при создании листа');
     }
   };
 
@@ -159,8 +184,8 @@ const PickingLists: React.FC = () => {
       setImportDialogOpen(false);
       setExcelFile(null);
       await fetchItems(selectedList._id);
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Ошибка при импорте Excel');
+    } catch (error) {
+      handleError(error, 'Ошибка при импорте Excel');
     }
   };
 
@@ -170,8 +195,8 @@ const PickingLists: React.FC = () => {
         collected: !item.collected
       });
       await fetchItems(selectedList!._id);
-    } catch (error: any) {
-      toast.error('Ошибка при обновлении статуса');
+    } catch (error) {
+      handleError(error, 'Ошибка при обновлении статуса');
     }
   };
 
@@ -181,8 +206,8 @@ const PickingLists: React.FC = () => {
         paid: !item.paid
       });
       await fetchItems(selectedList!._id);
-    } catch (error: any) {
-      toast.error('Ошибка при обновлении статуса');
+    } catch (error) {
+      handleError(error, 'Ошибка при обновлении статуса');
     }
   };
 
@@ -200,8 +225,8 @@ const PickingLists: React.FC = () => {
       setEditDialogOpen(false);
       setEditingItem(null);
       await fetchItems(selectedList!._id);
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Ошибка при обновлении');
+    } catch (error) {
+      handleError(error, 'Ошибка при обновлении');
     }
   };
 
@@ -223,8 +248,8 @@ const PickingLists: React.FC = () => {
       toast.success('Товар добавлен');
       setAddItemDialogOpen(false);
       await fetchItems(selectedList._id);
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Ошибка при добавлении товара');
+    } catch (error) {
+      handleError(error, 'Ошибка при добавлении товара');
     }
   };
 
@@ -249,8 +274,8 @@ const PickingLists: React.FC = () => {
       setDeleteItemModalOpen(false);
       setItemToDelete(null);
       await fetchItems(selectedList._id);
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Ошибка при удалении');
+    } catch (error) {
+      handleError(error, 'Ошибка при удалении');
     } finally {
       setDeleting(false);
     }
@@ -275,8 +300,8 @@ const PickingLists: React.FC = () => {
         setItems([]);
       }
       await fetchPickingLists();
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Ошибка при удалении');
+    } catch (error) {
+      handleError(error, 'Ошибка при удалении');
     } finally {
       setDeleting(false);
     }
@@ -284,6 +309,16 @@ const PickingLists: React.FC = () => {
 
   // Фильтрация элементов
   const filteredItems = items.filter(item => {
+    // Фильтр по поиску
+    if (debouncedSearchTerm) {
+      const searchLower = debouncedSearchTerm.toLowerCase();
+      const nameMatch = item.name?.toLowerCase().includes(searchLower);
+      const articleMatch = item.article?.toLowerCase().includes(searchLower);
+      if (!nameMatch && !articleMatch) {
+        return false;
+      }
+    }
+    
     // Фильтр по поставщику
     if (filterSupplier) {
       const itemSupplierId = item.supplier && typeof item.supplier === 'object' 
@@ -406,7 +441,7 @@ const PickingLists: React.FC = () => {
             sx={{ mb: 2 }}
           />
           {loading ? (
-            <CircularProgress />
+            <SkeletonLoader variant="list" rows={5} />
           ) : pickingLists.length === 0 ? (
             <Typography color="text.secondary">Нет листов сборки</Typography>
           ) : (
@@ -465,9 +500,22 @@ const PickingLists: React.FC = () => {
                 flexWrap: 'wrap', 
                 gap: 1 
               }}>
-                <Typography variant="h6" sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}>
-                  {format(new Date(selectedList.date), 'dd.MM.yyyy', { locale: ru })}
-                </Typography>
+                <Box>
+                  <Typography variant="h6" sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}>
+                    {selectedList.name || format(new Date(selectedList.date), 'dd.MM.yyyy', { locale: ru })}
+                  </Typography>
+                  {selectedList.googleSheetUrl && (
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      href={selectedList.googleSheetUrl}
+                      target="_blank"
+                      sx={{ mt: 0.5 }}
+                    >
+                      Открыть Google таблицу
+                    </Button>
+                  )}
+                </Box>
                 <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
                   <Button
                     variant="contained"
@@ -560,7 +608,7 @@ const PickingLists: React.FC = () => {
               </Box>
 
               {itemsLoading ? (
-                <CircularProgress />
+                <SkeletonLoader variant="table" rows={5} columns={6} />
               ) : (
                 <TableContainer sx={{ 
                   maxHeight: { xs: '400px', sm: '600px' }, 
@@ -811,9 +859,36 @@ const PickingLists: React.FC = () => {
               }}
             />
           </LocalizationProvider>
+          <Box sx={{ mt: 2, mb: 1 }}>
+            <Checkbox
+              checked={createGoogleSheet}
+              onChange={(e) => setCreateGoogleSheet(e.target.checked)}
+              size={isMobile ? 'small' : 'medium'}
+            />
+            <Typography component="span" variant="body2">
+              Создать Google таблицу
+            </Typography>
+          </Box>
+          {createGoogleSheet && (
+            <TextField
+              label="Название таблицы"
+              value={newListName}
+              onChange={(e) => setNewListName(e.target.value)}
+              fullWidth
+              margin="normal"
+              required={createGoogleSheet}
+              size={isMobile ? 'small' : 'medium'}
+              placeholder="Например: Лист сборки от 15.01.2024"
+              helperText="Это название будет использовано для Google таблицы"
+            />
+          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setCreateDialogOpen(false)} size={isMobile ? "large" : "medium"}>
+          <Button onClick={() => {
+            setCreateDialogOpen(false);
+            setNewListName('');
+            setCreateGoogleSheet(false);
+          }} size={isMobile ? "large" : "medium"}>
             Отмена
           </Button>
           <Button onClick={handleCreateList} variant="contained" size={isMobile ? "large" : "medium"}>

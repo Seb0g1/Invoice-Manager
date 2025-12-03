@@ -26,12 +26,15 @@ import DeleteConfirmModal from '../components/DeleteConfirmModal';
 import { useAuthStore } from '../store/authStore';
 import { useThemeContext } from '../contexts/ThemeContext';
 import toast from 'react-hot-toast';
+import { handleError } from '../utils/errorHandler';
+import SkeletonLoader from '../components/SkeletonLoader';
+import { useInvoices, useDeleteInvoice } from '../hooks/useInvoices';
+import { Pagination, FormControl, Select, MenuItem } from '@mui/material';
+import LazyImage from '../components/LazyImage';
 
 const Invoices: React.FC = () => {
   const { user } = useAuthStore();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [loading, setLoading] = useState(true);
   const [filterSupplier, setFilterSupplier] = useState('');
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
@@ -39,26 +42,33 @@ const Invoices: React.FC = () => {
   const [currentPhotoUrl, setCurrentPhotoUrl] = useState('');
   const [deleteInvoiceModalOpen, setDeleteInvoiceModalOpen] = useState(false);
   const [invoiceToDelete, setInvoiceToDelete] = useState<Invoice | null>(null);
-  const [deleting, setDeleting] = useState(false);
+  const [page, setPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(50);
   const { theme } = useThemeContext();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   const isDirector = user?.role === 'director';
+  
+  // React Query hooks
+  const { data, isLoading, error } = useInvoices({
+    supplier: filterSupplier || undefined,
+    startDate: filterStartDate || undefined,
+    endDate: filterEndDate || undefined
+  });
+  const deleteInvoiceMutation = useDeleteInvoice();
+  
+  const invoices = data || [];
+  const totalPages = 1; // TODO: добавить пагинацию на бэкенде
+  const totalItems = invoices.length;
+  const loading = isLoading;
 
   useEffect(() => {
-    if (isDirector) {
-      fetchSuppliers();
-      fetchInvoices();
-    } else {
-      fetchSuppliers();
-    }
+    fetchSuppliers();
   }, [isDirector]);
-
+  
   useEffect(() => {
-    if (isDirector) {
-      fetchInvoices();
-    }
-  }, [filterSupplier, filterStartDate, filterEndDate, isDirector]);
+    setPage(1); // Сбрасываем на первую страницу при изменении фильтров
+  }, [filterSupplier, filterStartDate, filterEndDate]);
 
   const fetchSuppliers = async () => {
     try {
@@ -81,22 +91,12 @@ const Invoices: React.FC = () => {
     }
   };
 
-  const fetchInvoices = async () => {
-    try {
-      setLoading(true);
-      const params: any = {};
-      if (filterSupplier) params.supplier = filterSupplier;
-      if (filterStartDate) params.startDate = filterStartDate;
-      if (filterEndDate) params.endDate = filterEndDate;
-
-      const response = await api.get('/invoices', { params });
-      setInvoices(response.data);
-    } catch (error) {
-      toast.error('Ошибка при загрузке накладных');
-    } finally {
-      setLoading(false);
+  // Обработка ошибки запроса
+  useEffect(() => {
+    if (error) {
+      handleError(error, 'Ошибка при загрузке накладных');
     }
-  };
+  }, [error]);
 
   const handleSuccess = () => {
     if (isDirector) {
@@ -128,8 +128,8 @@ const Invoices: React.FC = () => {
       fetchInvoices();
       setDeleteInvoiceModalOpen(false);
       setInvoiceToDelete(null);
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Ошибка при удалении накладной');
+    } catch (error) {
+      handleError(error, 'Ошибка при удалении накладной');
     } finally {
       setDeleting(false);
     }
@@ -217,11 +217,15 @@ const Invoices: React.FC = () => {
               </TableHead>
               <TableBody>
                 {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={isDirector ? (isMobile ? 3 : 5) : (isMobile ? 2 : 4)} align="center">
-                      <CircularProgress />
-                    </TableCell>
-                  </TableRow>
+                  <>
+                    {Array.from({ length: 5 }).map((_, index) => (
+                      <TableRow key={index}>
+                        <TableCell colSpan={isDirector ? (isMobile ? 3 : 5) : (isMobile ? 2 : 4)}>
+                          <SkeletonLoader variant="text" rows={1} />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </>
                 ) : invoices.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={isDirector ? (isMobile ? 3 : 5) : (isMobile ? 2 : 4)} align="center">
@@ -234,16 +238,22 @@ const Invoices: React.FC = () => {
                   invoices.map((invoice) => (
                     <TableRow key={invoice._id}>
                       <TableCell>
-                        <Box
-                          component="img"
+                        <LazyImage
                           src={invoice.photoUrl}
                           alt="Invoice"
+                          width={{ xs: 60, sm: 80 }}
+                          height={{ xs: 60, sm: 80 }}
+                          thumbnailSrc={invoice.photoUrl.replace('/uploads/', '/uploads/thumb_')}
+                          onError={(e) => {
+                            console.error('Ошибка загрузки фото:', invoice.photoUrl);
+                          }}
                           sx={{
                             width: { xs: 60, sm: 80 },
                             height: { xs: 60, sm: 80 },
                             objectFit: 'cover',
                             cursor: 'pointer',
                             borderRadius: 1,
+                            bgcolor: 'grey.200',
                             '&:active': {
                               transform: 'scale(0.95)',
                             },
@@ -319,7 +329,7 @@ const Invoices: React.FC = () => {
         type="invoice"
         name={invoiceToDelete ? (typeof invoiceToDelete.supplier === 'object' ? invoiceToDelete.supplier.name : '') : ''}
         confirmValue={invoiceToDelete ? format(new Date(invoiceToDelete.date), 'dd.MM.yyyy') : ''}
-        loading={deleting}
+        loading={deleteInvoiceMutation.isLoading}
       />
 
       <PhotoModal

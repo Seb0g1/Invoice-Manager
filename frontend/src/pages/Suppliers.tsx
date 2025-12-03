@@ -49,6 +49,12 @@ import { useCurrencyStore } from '../store/currencyStore';
 import { useThemeContext } from '../contexts/ThemeContext';
 import { useAuthStore } from '../store/authStore';
 import toast from 'react-hot-toast';
+import { handleError } from '../utils/errorHandler';
+import SkeletonLoader from '../components/SkeletonLoader';
+import { useDebounce } from '../utils/debounce';
+import { useForm, Controller } from 'react-hook-form';
+import { yupResolver } from '@hookform/resolvers/yup';
+import { supplierSchema, SupplierFormData } from '../utils/validation';
 
 const Suppliers: React.FC = () => {
   const navigate = useNavigate();
@@ -65,11 +71,23 @@ const Suppliers: React.FC = () => {
   const [currentPhotoUrl, setCurrentPhotoUrl] = useState('');
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [newSupplierName, setNewSupplierName] = useState('');
-  const [creating, setCreating] = useState(false);
   const { theme } = useThemeContext();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+
+  // React Hook Form для создания поставщика
+  const {
+    control: createSupplierControl,
+    handleSubmit: handleCreateSupplierSubmit,
+    reset: resetCreateSupplier,
+    formState: { errors: createSupplierErrors, isSubmitting: creating }
+  } = useForm<SupplierFormData>({
+    resolver: yupResolver(supplierSchema),
+    defaultValues: {
+      name: ''
+    }
+  });
 
   useEffect(() => {
     fetchSuppliers();
@@ -80,7 +98,7 @@ const Suppliers: React.FC = () => {
       const response = await api.get('/suppliers');
       setSuppliers(response.data);
     } catch (error) {
-      toast.error('Ошибка при загрузке поставщиков');
+      handleError(error, 'Ошибка при загрузке поставщиков');
     } finally {
       setLoading(false);
     }
@@ -94,7 +112,7 @@ const Suppliers: React.FC = () => {
         [supplierId]: response.data
       }));
     } catch (error) {
-      toast.error('Ошибка при загрузке деталей поставщика');
+      handleError(error, 'Ошибка при загрузке деталей поставщика');
     }
   };
 
@@ -185,8 +203,8 @@ const Suppliers: React.FC = () => {
         ...prev,
         [currentSupplierId]: []
       }));
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Ошибка при оплате');
+    } catch (error) {
+      handleError(error, 'Ошибка при оплате');
     }
   };
 
@@ -195,28 +213,20 @@ const Suppliers: React.FC = () => {
     setPhotoModalOpen(true);
   };
 
-  const handleCreateSupplier = async () => {
-    if (!newSupplierName.trim()) {
-      toast.error('Введите название поставщика');
-      return;
-    }
-
+  const handleCreateSupplier = async (data: SupplierFormData) => {
     try {
-      setCreating(true);
-      await api.post('/suppliers', { name: newSupplierName.trim() });
+      await api.post('/suppliers', { name: data.name.trim() });
       toast.success('Поставщик создан');
       setCreateDialogOpen(false);
-      setNewSupplierName('');
+      resetCreateSupplier();
       await fetchSuppliers();
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Ошибка при создании поставщика');
-    } finally {
-      setCreating(false);
+    } catch (error) {
+      handleError(error, 'Ошибка при создании поставщика');
     }
   };
 
   const filteredSuppliers = suppliers.filter((supplier) =>
-    supplier.name.toLowerCase().includes(searchTerm.toLowerCase())
+    supplier.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
   );
 
   if (loading) {
@@ -556,56 +566,61 @@ const Suppliers: React.FC = () => {
         open={createDialogOpen}
         onClose={() => {
           setCreateDialogOpen(false);
-          setNewSupplierName('');
+          resetCreateSupplier();
         }}
         maxWidth="sm"
         fullWidth
         fullScreen={isMobile}
       >
-        <DialogTitle>Создать поставщика</DialogTitle>
-        <DialogContent>
-          <TextField
-            fullWidth
-            label="Название поставщика"
-            value={newSupplierName}
-            onChange={(e) => setNewSupplierName(e.target.value)}
-            margin="normal"
-            required
-            autoFocus
-            size={isMobile ? "small" : "medium"}
-            placeholder="Введите название поставщика"
-            InputProps={{
-              style: { textTransform: 'none' }
-            }}
-            inputProps={{
-              style: { textTransform: 'none' }
-            }}
-            onKeyPress={(e) => {
-              if (e.key === 'Enter' && newSupplierName.trim()) {
-                handleCreateSupplier();
-              }
-            }}
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button
-            onClick={() => {
-              setCreateDialogOpen(false);
-              setNewSupplierName('');
-            }}
-            size={isMobile ? "large" : "medium"}
-          >
-            Отмена
-          </Button>
-          <Button
-            onClick={handleCreateSupplier}
-            variant="contained"
-            disabled={!newSupplierName.trim() || creating}
-            size={isMobile ? "large" : "medium"}
-          >
-            {creating ? <CircularProgress size={24} /> : 'Создать'}
-          </Button>
-        </DialogActions>
+        <form onSubmit={handleCreateSupplierSubmit(handleCreateSupplier)}>
+          <DialogTitle>Создать поставщика</DialogTitle>
+          <DialogContent>
+            <Controller
+              name="name"
+              control={createSupplierControl}
+              render={({ field }) => (
+                <TextField
+                  {...field}
+                  fullWidth
+                  label="Название поставщика *"
+                  margin="normal"
+                  required
+                  autoFocus
+                  size={isMobile ? "small" : "medium"}
+                  placeholder="Введите название поставщика"
+                  error={!!createSupplierErrors.name}
+                  helperText={createSupplierErrors.name?.message}
+                  InputProps={{
+                    style: { textTransform: 'none' }
+                  }}
+                  inputProps={{
+                    style: { textTransform: 'none' }
+                  }}
+                />
+              )}
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button
+              onClick={() => {
+                setCreateDialogOpen(false);
+                resetCreateSupplier();
+              }}
+              disabled={creating}
+              size={isMobile ? "large" : "medium"}
+            >
+              Отмена
+            </Button>
+            <Button
+              type="submit"
+              variant="contained"
+              disabled={creating}
+              size={isMobile ? "large" : "medium"}
+            >
+              {creating ? <CircularProgress size={24} /> : 'Создать'}
+            </Button>
+          </DialogActions>
+        </form>
       </Dialog>
     </Box>
   );

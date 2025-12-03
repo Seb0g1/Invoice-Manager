@@ -1,5 +1,6 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
 import OzonConfig from '../models/OzonConfig';
+import { logger } from '../utils/logger';
 
 // Функция для задержки
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -1150,7 +1151,7 @@ class OzonService {
           if (productId) {
             // Логируем структуру первого товара для отладки
             if (productsMap.size === 0) {
-              console.log('[DEBUG] Структура товара из /v3/product/list:', JSON.stringify(item, null, 2).substring(0, 1000));
+              logger.debug('Структура товара из /v3/product/list:', JSON.stringify(item, null, 2).substring(0, 1000));
             }
 
             productsMap.set(productId, {
@@ -1263,7 +1264,7 @@ class OzonService {
     // Собираем все offer_id из товаров (уникальные)
     const offerIdList = Array.from(new Set(offerIds.filter(id => id && id.length > 0)));
 
-    console.log(`[DEBUG] Всего offer_id для загрузки остатков: ${offerIdList.length}`);
+    logger.debug(`Всего offer_id для загрузки остатков: ${offerIdList.length}`);
 
     // Загружаем остатки через курсорную пагинацию
     // Разбиваем offer_id на батчи по 1000 (максимум для фильтра)
@@ -1284,7 +1285,7 @@ class OzonService {
 
             // Логируем структуру ответа для первого запроса
             if (i === 0 && stocksCursor === null) {
-              console.log('[DEBUG] Структура ответа остатков:', JSON.stringify(stocksResult, null, 2).substring(0, 1000));
+              logger.debug('Структура ответа остатков:', JSON.stringify(stocksResult, null, 2).substring(0, 1000));
             }
 
             // Обрабатываем результат согласно документации /v4/product/info/stocks
@@ -1314,7 +1315,7 @@ class OzonService {
                       const reserved = s.reserved ?? 0;
                       return sum + (typeof reserved === 'number' ? reserved : parseFloat(String(reserved)) || 0);
                     }, 0) ?? 0;
-                    console.log(`[DEBUG] Сохранены остатки для offer_id=${offerId}, product_id=${productId}:`, {
+                    logger.debug(`Сохранены остатки для offer_id=${offerId}, product_id=${productId}:`, {
                       stocksCount: item.stocks?.length || 0,
                       totalPresent,
                       totalReserved,
@@ -1324,7 +1325,7 @@ class OzonService {
                 }
               });
             } else {
-              console.log(`[DEBUG] Неожиданная структура ответа остатков:`, {
+              logger.debug(`Неожиданная структура ответа остатков:`, {
                 hasItems: !!stocksResult.items,
                 itemsType: typeof stocksResult.items,
                 keys: Object.keys(stocksResult)
@@ -1359,7 +1360,7 @@ class OzonService {
       }
     }
 
-    console.log(`[DEBUG] Загружено остатков для ${stocksMap.size} товаров`);
+    logger.debug(`Загружено остатков для ${stocksMap.size} товаров`);
 
     // Загружаем цены через /v5/product/info/prices с курсорной пагинацией
     onProgress?.(0, totalProducts, 'Загрузка цен...');
@@ -1370,7 +1371,7 @@ class OzonService {
     // Собираем все offer_id из товаров (уникальные)
     const offerIdListForPrices = Array.from(new Set(offerIds.filter(id => id && id.length > 0)));
 
-    console.log(`[DEBUG] Всего offer_id для загрузки цен: ${offerIdListForPrices.length}`);
+    logger.debug(`Всего offer_id для загрузки цен: ${offerIdListForPrices.length}`);
 
     // Загружаем цены через курсорную пагинацию
     // Разбиваем offer_id на батчи по 1000 (максимум для фильтра)
@@ -1413,7 +1414,7 @@ class OzonService {
                   
                   // Логируем первые несколько для отладки
                   if (pricesLoaded < 5) {
-                    console.log(`[DEBUG] Сохранены цены для offer_id=${offerId}, product_id=${productId}:`, {
+                    logger.debug(`Сохранены цены для offer_id=${offerId}, product_id=${productId}:`, {
                       price: priceData.price,
                       old_price: priceData.old_price,
                       currency: priceData.currency_code
@@ -1451,7 +1452,7 @@ class OzonService {
       }
     }
 
-    console.log(`[DEBUG] Загружено цен для ${pricesMap.size} товаров`);
+    logger.debug(`Загружено цен для ${pricesMap.size} товаров`);
 
     // Загружаем изображения батчами по 1000
     onProgress?.(0, totalProducts, 'Загрузка изображений...');
@@ -1465,7 +1466,7 @@ class OzonService {
         
         // Логируем структуру ответа для первого батча
         if (i === 0) {
-          console.log('[DEBUG] Структура ответа изображений:', JSON.stringify(picturesResult, null, 2).substring(0, 500));
+          logger.debug('Структура ответа изображений:', JSON.stringify(picturesResult, null, 2).substring(0, 500));
         }
 
         // Обрабатываем разные форматы ответа изображений
@@ -1511,7 +1512,7 @@ class OzonService {
               if (imageUrls.length > 0) {
                 imagesMap.set(productId, imageUrls);
               } else if (i === 0) {
-                console.log(`[DEBUG] Нет изображений для товара ${productId}:`, {
+                logger.debug(`Нет изображений для товара ${productId}:`, {
                   keys: Object.keys(picItem),
                   sample: JSON.stringify(picItem).substring(0, 300)
                 });
@@ -1519,7 +1520,7 @@ class OzonService {
             }
           });
         } else if (i === 0) {
-          console.log(`[DEBUG] Неожиданная структура ответа изображений для батча ${i}:`, {
+          logger.debug(`Неожиданная структура ответа изображений для батча ${i}:`, {
             keys: Object.keys(picturesResult),
             hasItems: !!picturesResult.items,
             hasResult: !!picturesResult.result,
@@ -1591,7 +1592,7 @@ class OzonService {
           
           // Логируем для первых товаров для отладки
           if (processed < 5) {
-            console.log(`[DEBUG] Product ${productId} (offer: ${offerId}):`, {
+            logger.debug(`Product ${productId} (offer: ${offerId}):`, {
               stocksCount: stockData.stocks.length,
               totalPresent,
               totalReserved,
@@ -1606,7 +1607,7 @@ class OzonService {
             });
           }
         } else if (processed < 5) {
-          console.log(`[DEBUG] Product ${productId} (offer: ${offerId}): No stock data found`, {
+          logger.debug(`Product ${productId} (offer: ${offerId}): No stock data found`, {
             hasStockData: !!stockData,
             hasStocksArray: stockData?.stocks && Array.isArray(stockData.stocks),
             stockDataKeys: stockData ? Object.keys(stockData) : [],
@@ -1649,7 +1650,7 @@ class OzonService {
 
         // Логируем для первых товаров
         if (processed < 5) {
-          console.log(`[DEBUG] Сохранение товара ${productId}:`, {
+          logger.debug(`Сохранение товара ${productId}:`, {
             name: productName,
             price,
             oldPrice,
@@ -1679,7 +1680,7 @@ class OzonService {
         
         // ВАЖНО: Проверяем, что totalPresent правильно вычислен
         if (processed < 10 && totalPresent > 0) {
-          console.log(`[DEBUG] Товар ${productId} будет сохранен с остатком ${totalPresent}`);
+          logger.debug(`Товар ${productId} будет сохранен с остатком ${totalPresent}`);
         }
 
         bulkOps.push({
@@ -1732,7 +1733,7 @@ class OzonService {
         
         // Логируем результат для первого батча
         if (i === 0) {
-          console.log(`[DEBUG] Результат bulkWrite для первого батча:`, {
+          logger.debug(`Результат bulkWrite для первого батча:`, {
             matchedCount: result.matchedCount,
             modifiedCount: result.modifiedCount,
             upsertedCount: result.upsertedCount,
@@ -1782,7 +1783,7 @@ class OzonService {
                 
                 // Если остатки не совпадают, пытаемся обновить вручную
                 if (!matches && expectedPresent > 0) {
-                  console.log(`[DEBUG] ВНИМАНИЕ: Остатки не совпадают для товара ${testProductId}! Пытаемся исправить...`);
+                  logger.debug(`ВНИМАНИЕ: Остатки не совпадают для товара ${testProductId}! Пытаемся исправить...`);
                   await OzonProduct.updateOne(
                     { productId: testProductId },
                     { 
@@ -1792,10 +1793,10 @@ class OzonService {
                       } 
                     }
                   );
-                  console.log(`[DEBUG] Товар ${testProductId} обновлен вручную`);
+                  logger.debug(`Товар ${testProductId} обновлен вручную`);
                 }
               } else {
-                console.log(`[DEBUG] Товар ${testProductId} не найден в БД после сохранения`);
+                logger.debug(`Товар ${testProductId} не найден в БД после сохранения`);
               }
             }
           }

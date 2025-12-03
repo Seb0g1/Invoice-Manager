@@ -76,6 +76,31 @@ class SchedulerService {
       }
     });
 
+    // Полная синхронизация товаров OZON - раз в сутки в 4:00
+    this.scheduleTask('full-sync-ozon', '0 4 * * *', async () => {
+      console.log('[Scheduler] Запуск полной синхронизации товаров OZON...');
+      try {
+        const OzonConfig = (await import('../models/OzonConfig')).default;
+        const config = await OzonConfig.findOne({ enabled: true });
+        
+        if (!config || !config.clientId || !config.apiKey) {
+          console.log('[Scheduler] OZON API не настроен, пропускаем синхронизацию');
+          return;
+        }
+
+        const ozonService = (await import('./ozonService')).default;
+        await ozonService.initialize();
+        
+        const result = await ozonService.syncAllProducts((current, total, stage) => {
+          console.log(`[Scheduler] OZON Sync: ${stage} - ${current}/${total}`);
+        });
+        
+        console.log(`[Scheduler] Полная синхронизация OZON завершена: ${result.synced}/${result.total} товаров за ${result.duration}с. Ошибок: ${result.errors}`);
+      } catch (error: any) {
+        console.error('[Scheduler] Ошибка полной синхронизации OZON:', error.message);
+      }
+    });
+
     this.isRunning = true;
     console.log('[Scheduler] Планировщик задач запущен');
   }

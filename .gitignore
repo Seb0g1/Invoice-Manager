@@ -35,6 +35,39 @@ logs/
 backend/uploads/*
 !backend/uploads/.gitkeep
 
+# Build outputs (не коммитим собранные файлы)
+backend/dist/
+frontend/dist/
+
+# Windows system files
+AppData/
+Contacts/
+Desktop/
+Documents/
+Downloads/
+Favorites/
+Links/
+Music/
+OneDrive/
+Pictures/
+Saved Games/
+Searches/
+Videos/
+NTUSER.*
+ntuser.*
+*.LOG*
+*.regtrans-ms
+*.blf
+*.ini
+
+# User config files
+.gitconfig
+.ssh/
+.cursor/
+.vscode/
+.env
+.env.local
+
 # Temporary files
 *.tmp
 *.temp

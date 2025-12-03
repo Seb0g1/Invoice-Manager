@@ -57,6 +57,9 @@ export interface SupplierDetails {
 export interface PickingList {
   _id: string;
   date: string;
+  name?: string;
+  googleSheetId?: string;
+  googleSheetUrl?: string;
   createdAt?: string;
   updatedAt?: string;
 }

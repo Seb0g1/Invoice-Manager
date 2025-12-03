@@ -5,6 +5,7 @@ import PickingListItem from '../models/PickingListItem';
 import Supplier from '../models/Supplier';
 import User from '../models/User';
 import telegramService from '../services/telegramService';
+import googleSheetsService from '../services/googleSheetsService';
 import * as XLSX from 'xlsx';
 import mongoose from 'mongoose';
 
@@ -60,11 +61,30 @@ export const getPickingListById = async (req: AuthRequest, res: Response) => {
 
 export const createPickingList = async (req: AuthRequest, res: Response) => {
   try {
-    const { date } = req.body;
+    const { date, name, createGoogleSheet } = req.body;
 
     const pickingList = new PickingList({
-      date: date ? new Date(date) : new Date()
+      date: date ? new Date(date) : new Date(),
+      name: name || undefined
     });
+
+    // Если нужно создать Google таблицу
+    if (createGoogleSheet && name) {
+      try {
+        googleSheetsService.initialize();
+        const { spreadsheetId, spreadsheetUrl } = await googleSheetsService.createPickingListSheet(
+          name,
+          [] // Пустой список, так как товары еще не добавлены
+        );
+
+        pickingList.googleSheetId = spreadsheetId;
+        pickingList.googleSheetUrl = spreadsheetUrl;
+      } catch (googleError: any) {
+        console.error('Ошибка создания Google таблицы:', googleError);
+        // Продолжаем создание листа даже если Google таблица не создалась
+        // Можно вернуть предупреждение, но не ошибку
+      }
+    }
 
     await pickingList.save();
 
@@ -133,6 +153,133 @@ export const importExcel = async (req: AuthRequest, res: Response) => {
     const worksheet = workbook.Sheets[sheetName];
     const data = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
 
+    // Автоматическое определение колонок
+    // Название всегда в столбце A (индекс 0)
+    let nameCol = 0; // A - всегда название
+    let articleCol = -1;
+    let quantityCol = -1;
+    let priceCol = -1;
+    let supplierCol = -1;
+
+    // Анализируем первые несколько строк для определения колонок
+    const sampleRows = data.slice(0, Math.min(10, data.length));
+    
+    // Ищем заголовки в первой строке
+    if (data.length > 0) {
+      const headerRow = data[0] as any[];
+      for (let col = 0; col < headerRow.length; col++) {
+        const header = String(headerRow[col] || '').toLowerCase().trim();
+        if (header.includes('артикул') || header.includes('article') || header.includes('арт')) {
+          articleCol = col;
+        } else if (header.includes('количество') || header.includes('кол-во') || header.includes('quantity') || header.includes('qty')) {
+          quantityCol = col;
+        } else if (header.includes('цена') || header.includes('price') || header.includes('стоимость')) {
+          priceCol = col;
+        } else if (header.includes('поставщик') || header.includes('supplier') || header.includes('vendor')) {
+          supplierCol = col;
+        }
+      }
+    }
+
+    // Если заголовки не найдены, определяем по содержимому
+    if (quantityCol === -1 || priceCol === -1 || articleCol === -1) {
+      const columnAnalysis: Array<{
+        col: number;
+        articleScore: number;
+        quantityScore: number;
+        priceScore: number;
+      }> = [];
+
+      const firstRow = data[0] as any[];
+      const maxCol = firstRow && Array.isArray(firstRow) ? Math.min(10, firstRow.length) : 10;
+
+      for (let col = 1; col < maxCol; col++) {
+        let numericCount = 0;
+        let integerCount = 0;
+        let decimalCount = 0;
+        let stringCount = 0;
+        let maxValue = 0;
+        let minValue = Infinity;
+        let hasLetters = false;
+        let totalCells = 0;
+
+        for (const row of sampleRows.slice(1)) {
+          const rowArray = row as any[];
+          const cell = String(rowArray[col] || '').trim();
+          if (!cell) continue;
+          
+          totalCells++;
+          const num = parseFloat(cell);
+          
+          if (!isNaN(num) && num > 0) {
+            numericCount++;
+            maxValue = Math.max(maxValue, num);
+            minValue = Math.min(minValue, num);
+            
+            if (Number.isInteger(num)) {
+              integerCount++;
+            } else {
+              decimalCount++;
+            }
+          } else {
+            stringCount++;
+            if (/[а-яА-Яa-zA-Z]/.test(cell)) {
+              hasLetters = true;
+            }
+          }
+        }
+
+        if (totalCells === 0) continue;
+
+        const articleScore = (stringCount / totalCells) * 0.5 + (hasLetters ? 0.3 : 0) + 
+                            (numericCount > 0 && maxValue < 1000 && integerCount / numericCount > 0.8 ? 0.2 : 0);
+        
+        const quantityScore = (integerCount / totalCells) * 0.6 + 
+                             (numericCount > 0 && maxValue < 10000 && maxValue > 0 && maxValue < 1000 ? 0.4 : 0) +
+                             (decimalCount === 0 ? 0.2 : -0.2);
+        
+        const priceScore = (decimalCount / totalCells) * 0.4 + 
+                          (numericCount > 0 && maxValue >= 10 ? 0.4 : 0) +
+                          (numericCount > 0 && maxValue > 100 ? 0.2 : 0);
+
+        columnAnalysis.push({
+          col,
+          articleScore,
+          quantityScore,
+          priceScore
+        });
+      }
+
+      const sortedByArticle = [...columnAnalysis].sort((a, b) => b.articleScore - a.articleScore);
+      const sortedByQuantity = [...columnAnalysis].sort((a, b) => b.quantityScore - a.quantityScore);
+      const sortedByPrice = [...columnAnalysis].sort((a, b) => b.priceScore - a.priceScore);
+
+      if (articleCol === -1 && sortedByArticle[0] && sortedByArticle[0].articleScore > 0.3) {
+        articleCol = sortedByArticle[0].col;
+      }
+      
+      if (quantityCol === -1 && sortedByQuantity[0] && sortedByQuantity[0].quantityScore > 0.4) {
+        if (sortedByQuantity[0].col !== articleCol) {
+          quantityCol = sortedByQuantity[0].col;
+        } else if (sortedByQuantity[1] && sortedByQuantity[1].quantityScore > 0.4) {
+          quantityCol = sortedByQuantity[1].col;
+        }
+      }
+      
+      if (priceCol === -1 && sortedByPrice[0] && sortedByPrice[0].priceScore > 0.4) {
+        if (sortedByPrice[0].col !== quantityCol && sortedByPrice[0].col !== articleCol) {
+          priceCol = sortedByPrice[0].col;
+        } else if (sortedByPrice[1] && sortedByPrice[1].priceScore > 0.4) {
+          priceCol = sortedByPrice[1].col;
+        }
+      }
+
+      if (quantityCol === -1) quantityCol = 1; // B по умолчанию
+      if (priceCol === -1) priceCol = 2; // C по умолчанию
+    }
+
+    console.log(`[Import] Определены колонки: название=${nameCol}, артикул=${articleCol}, количество=${quantityCol}, цена=${priceCol}, поставщик=${supplierCol}`);
+
     // Получаем существующие товары для обновления
     const existingItems = await PickingListItem.find({ pickingList: pickingList._id });
     const existingItemsMap = new Map<string, typeof existingItems[0]>();
@@ -141,9 +288,10 @@ export const importExcel = async (req: AuthRequest, res: Response) => {
       existingItemsMap.set(normalizedName, item);
     });
 
-    // Словарь для группировки по названию (ключ: нормализованное название, значение: {originalName, quantity, price, supplierName})
+    // Словарь для группировки по названию (ключ: нормализованное название, значение: {originalName, article, quantity, price, supplierName})
     const itemsMap = new Map<string, { 
-      originalName: string; 
+      originalName: string;
+      article?: string;
       quantity: number; 
       price: number;
       supplierName?: string;
@@ -156,10 +304,16 @@ export const importExcel = async (req: AuthRequest, res: Response) => {
       const row = data[i] as any[];
       if (!row || row.length === 0) continue;
 
-      const name = String(row[0] || '').trim(); // Столбец A - наименование товара или поставщика
-      const quantity = parseFloat(String(row[1] || '0')) || 0; // Столбец B - количество
-      const price = parseFloat(String(row[2] || '0')) || 0; // Столбец C - цена
-      const supplierName = String(row[3] || '').trim(); // Столбец D - поставщик
+      const name = String(row[nameCol] || '').trim();
+      const article = articleCol >= 0 ? String(row[articleCol] || '').trim() : '';
+      const quantity = quantityCol >= 0 ? (parseFloat(String(row[quantityCol] || '0')) || 0) : 0;
+      const price = priceCol >= 0 ? (parseFloat(String(row[priceCol] || '0')) || 0) : 0;
+      const supplierName = supplierCol >= 0 ? String(row[supplierCol] || '').trim() : '';
+
+      // Логируем первые несколько товаров для отладки
+      if (i <= 3 && article) {
+        console.log(`[Import] Товар ${i}: название="${name}", артикул="${article}", кол-во=${quantity}, цена=${price}`);
+      }
 
       if (!name) continue; // Пропускаем пустые строки
 
@@ -191,6 +345,10 @@ export const importExcel = async (req: AuthRequest, res: Response) => {
         if (price > 0) {
           existingItem.price = price;
         }
+        // Обновляем артикул, если он указан
+        if (article) {
+          existingItem.article = article;
+        }
         // Обновляем поставщика, если он указан
         if (finalSupplierName) {
           existingItem.supplierName = finalSupplierName;
@@ -199,6 +357,7 @@ export const importExcel = async (req: AuthRequest, res: Response) => {
         // Создаем новый элемент
         itemsMap.set(normalizedName, {
           originalName: name,
+          article: article || undefined,
           quantity,
           price: price || 0,
           supplierName: finalSupplierName,
@@ -261,6 +420,10 @@ export const importExcel = async (req: AuthRequest, res: Response) => {
         if (itemData.price > 0) {
           existingItem.price = itemData.price;
         }
+        // Обновляем артикул, если он указан
+        if (itemData.article) {
+          existingItem.article = itemData.article;
+        }
         // Обновляем поставщика, если он указан
         if (supplierId) {
           existingItem.supplier = supplierId;
@@ -272,6 +435,7 @@ export const importExcel = async (req: AuthRequest, res: Response) => {
         const newItem = new PickingListItem({
           pickingList: pickingList._id,
           name: itemData.originalName,
+          article: itemData.article,
           quantity: itemData.quantity,
           price: itemData.price,
           supplier: supplierId,
