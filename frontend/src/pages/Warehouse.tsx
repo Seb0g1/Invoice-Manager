@@ -71,9 +71,9 @@ const Warehouse: React.FC = () => {
   const deleteMutation = useDeleteWarehouseItem();
   const deleteManyMutation = useDeleteWarehouseItems();
   
-  const items = data?.items || [];
-  const totalPages = data?.pagination?.totalPages || 1;
-  const totalItems = data?.pagination?.total || 0;
+  const items = (data as any)?.items || [];
+  const totalPages = (data as any)?.pagination?.totalPages || 1;
+  const totalItems = (data as any)?.pagination?.total || 0;
   const loading = isLoading;
   
   // React Hook Form для создания

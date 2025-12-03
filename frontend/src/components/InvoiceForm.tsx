@@ -108,8 +108,6 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
     }
   }, [paidAmountType, paidAmountUSD, paidAmountRUB, rate]);
 
-  const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
-
 
   // Функция для оптимизации изображения для мобильных устройств
   const optimizeImageForMobile = async (file: File, maxWidth: number = 1200): Promise<File> => {
@@ -360,7 +358,6 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
       ];
 
       let итогоИндекс = -1;
-      let итогоТекст = '';
 
       // Сначала ищем в нормализованном тексте
       for (const pattern of итогоPatterns) {
@@ -370,7 +367,6 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
           const normalizedIndex = normalizedText.indexOf(match[0]);
           // Приблизительно находим в оригинале (может быть небольшая погрешность)
           итогоИндекс = Math.max(0, normalizedIndex - 10);
-          итогоТекст = match[0];
           console.log('[OCR] Найдено ключевое слово:', match[0], 'на позиции', итогоИндекс);
           break;
         }
@@ -382,7 +378,6 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
           const match = text.match(pattern);
           if (match) {
             итогоИндекс = text.indexOf(match[0]);
-            итогоТекст = match[0];
             console.log('[OCR] Найдено ключевое слово (оригинал):', match[0], 'на позиции', итогоИндекс);
             break;
           }
@@ -609,7 +604,7 @@ const InvoiceForm: React.FC<InvoiceFormProps> = ({
             displayWidth = containerHeight * imgAspect;
           }
 
-          setImageSize({ width: displayWidth, height: displayHeight });
+          // Размеры изображения сохранены для будущего использования
         };
         img.src = reader.result as string;
       };
