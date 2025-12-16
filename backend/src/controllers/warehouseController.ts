@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import WarehouseItem from '../models/WarehouseItem';
 import * as XLSX from 'xlsx';
+import mongoose from 'mongoose';
 
 export const getWarehouseItems = async (req: AuthRequest, res: Response) => {
   try {
@@ -736,13 +737,37 @@ export const exportWarehouseItems = async (req: AuthRequest, res: Response) => {
  */
 export const getCategories = async (req: AuthRequest, res: Response) => {
   try {
-    const categories = await WarehouseItem.distinct('category').then(cats => 
-      cats.filter(cat => cat && cat.trim().length > 0).sort()
-    );
+    // Проверка подключения к базе данных
+    if (mongoose.connection.readyState !== 1) {
+      console.error('MongoDB not connected. State:', mongoose.connection.readyState);
+      return res.status(503).json({ 
+        message: 'База данных недоступна. Попробуйте позже.' 
+      });
+    }
+
+    const allCategories = await WarehouseItem.distinct('category');
+    
+    // Безопасная фильтрация и сортировка категорий
+    const categories = allCategories
+      .filter((cat: any) => {
+        // Проверяем, что категория существует и является строкой
+        if (!cat) return false;
+        if (typeof cat !== 'string') return false;
+        // Проверяем, что после trim есть содержимое
+        const trimmed = cat.trim();
+        return trimmed.length > 0;
+      })
+      .map((cat: any) => String(cat).trim())
+      .sort();
+    
     res.json({ categories });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Get categories error:', error);
-    res.status(500).json({ message: 'Ошибка сервера' });
+    const errorMessage = error?.message || 'Ошибка сервера';
+    res.status(500).json({ 
+      message: errorMessage,
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 };
 
@@ -751,26 +776,64 @@ export const getCategories = async (req: AuthRequest, res: Response) => {
  */
 export const getLowStockItems = async (req: AuthRequest, res: Response) => {
   try {
+    // Проверка подключения к базе данных
+    if (mongoose.connection.readyState !== 1) {
+      console.error('MongoDB not connected. State:', mongoose.connection.readyState);
+      return res.status(503).json({ 
+        message: 'База данных недоступна. Попробуйте позже.' 
+      });
+    }
+
+    // Более безопасный запрос для товаров с низкими остатками
     const items = await WarehouseItem.find({
       $or: [
-        { quantity: { $lte: 0 } },
+        // Товары с количеством <= 0
+        { 
+          quantity: { 
+            $exists: true, 
+            $lte: 0 
+          } 
+        },
+        // Товары, где quantity <= lowStockThreshold и lowStockThreshold > 0
         {
-          $expr: {
-            $lte: [
-              { $ifNull: ['$quantity', 0] },
-              { $ifNull: ['$lowStockThreshold', 0] }
-            ]
-          }
+          $and: [
+            { lowStockThreshold: { $exists: true, $gt: 0 } },
+            {
+              $expr: {
+                $lte: [
+                  { $ifNull: ['$quantity', 0] },
+                  '$lowStockThreshold'
+                ]
+              }
+            }
+          ]
         }
       ]
     })
       .sort({ quantity: 1, name: 1 })
       .lean();
 
-    res.json({ items, count: items.length });
-  } catch (error) {
+    // Безопасная обработка результатов
+    const safeItems = items.map((item: any) => ({
+      _id: item._id?.toString() || String(item._id),
+      name: item.name || '',
+      quantity: item.quantity ?? 0,
+      article: item.article || '',
+      price: item.price ?? 0,
+      category: item.category || '',
+      lowStockThreshold: item.lowStockThreshold ?? 0,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt
+    }));
+
+    res.json({ items: safeItems, count: safeItems.length });
+  } catch (error: any) {
     console.error('Get low stock items error:', error);
-    res.status(500).json({ message: 'Ошибка сервера' });
+    const errorMessage = error?.message || 'Ошибка сервера';
+    res.status(500).json({ 
+      message: errorMessage,
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 };
 
