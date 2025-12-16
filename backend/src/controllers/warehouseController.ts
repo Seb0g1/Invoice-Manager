@@ -96,15 +96,29 @@ export const getAllWarehouseItemIds = async (req: AuthRequest, res: Response) =>
       .select('_id')
       .lean();
 
-    const ids = items.map((item: any) => item._id.toString());
+    // Безопасное преобразование ID в строки
+    const ids = items.map((item: any) => {
+      if (!item || !item._id) {
+        console.warn('Item without _id found:', item);
+        return null;
+      }
+      // Если _id уже строка, возвращаем как есть, иначе преобразуем
+      return typeof item._id === 'string' ? item._id : String(item._id);
+    }).filter((id: string | null): id is string => id !== null);
+
+    console.log(`[getAllWarehouseItemIds] Found ${ids.length} items with filters:`, { search, category });
 
     res.json({
       ids,
       count: ids.length
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Get all warehouse item IDs error:', error);
-    res.status(500).json({ message: 'Ошибка сервера' });
+    const errorMessage = error?.message || 'Ошибка сервера';
+    res.status(500).json({ 
+      message: errorMessage,
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 };
 

@@ -259,12 +259,29 @@ const Warehouse: React.FC = () => {
       }
 
       const response = await api.get('/warehouse/ids', { params });
-      const allIds = response.data.ids || [];
+      
+      // Безопасная обработка ответа
+      let allIds: string[] = [];
+      if (response?.data) {
+        if (Array.isArray(response.data.ids)) {
+          allIds = response.data.ids.map((id: any) => String(id));
+        } else if (Array.isArray(response.data)) {
+          // Если ответ пришел как массив напрямую
+          allIds = response.data.map((id: any) => String(id));
+        }
+      }
+      
+      if (allIds.length === 0) {
+        toast.info('Нет товаров для выбора');
+        return;
+      }
       
       setSelectedItems(allIds);
       toast.success(`Выбрано товаров: ${allIds.length}`);
-    } catch (error) {
-      handleError(error, 'Ошибка при выборе всех товаров');
+    } catch (error: any) {
+      console.error('Ошибка при выборе всех товаров:', error);
+      const errorMessage = error?.response?.data?.message || error?.message || 'Неизвестная ошибка';
+      handleError(error, `Ошибка при выборе всех товаров: ${errorMessage}`);
     }
   };
 
