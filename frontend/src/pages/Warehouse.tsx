@@ -34,7 +34,6 @@ import {
   UploadFile as UploadFileIcon,
   Search as SearchIcon,
   Clear as ClearIcon,
-  FileDownload as FileDownloadIcon,
   Warning as WarningIcon
 } from '@mui/icons-material';
 import { useForm, Controller } from 'react-hook-form';
@@ -69,7 +68,6 @@ const Warehouse: React.FC = () => {
   const [categories, setCategories] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(50);
-  const [exporting, setExporting] = useState(false);
   
   // Debounced search term
   const debouncedSearchTerm = useDebounce(searchTerm, 300);
@@ -321,37 +319,6 @@ const Warehouse: React.FC = () => {
       setImporting(false);
       // Сброс input
       e.target.value = '';
-    }
-  };
-
-  const handleExport = async () => {
-    setExporting(true);
-    try {
-      const params: any = {};
-      if (searchTerm) params.search = searchTerm;
-      if (categoryFilter) params.category = categoryFilter;
-      
-      const response = await api.get('/warehouse/export', {
-        params,
-        responseType: 'blob'
-      });
-
-      // Создаем ссылку для скачивания
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      const filename = `warehouse-export-${new Date().toISOString().split('T')[0]}.xlsx`;
-      link.setAttribute('download', filename);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-
-      toast.success('Экспорт завершен успешно');
-    } catch (error) {
-      handleError(error, 'Ошибка при экспорте товаров');
-    } finally {
-      setExporting(false);
     }
   };
 

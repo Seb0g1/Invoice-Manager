@@ -6,7 +6,6 @@ import {
   Button,
   Collapse,
   IconButton,
-  Typography,
   Chip
 } from '@mui/material';
 import {
@@ -16,14 +15,12 @@ import {
 } from '@mui/icons-material';
 import api from '../services/api';
 import { WarehouseItem } from '../types';
-import { useThemeContext } from '../contexts/ThemeContext';
 import { useNavigate } from 'react-router-dom';
 
 const LowStockAlert: React.FC = () => {
   const [lowStockItems, setLowStockItems] = useState<WarehouseItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(true);
-  const { theme } = useThemeContext();
   const navigate = useNavigate();
 
   useEffect(() => {

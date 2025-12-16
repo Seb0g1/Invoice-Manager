@@ -6,8 +6,7 @@ import {
   Typography,
   Box,
   IconButton,
-  Button,
-  useMediaQuery
+  Button
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -15,7 +14,6 @@ import {
   Warning as WarningIcon
 } from '@mui/icons-material';
 import { WarehouseItem } from '../types';
-import { useThemeContext } from '../contexts/ThemeContext';
 
 interface WarehouseItemRowProps {
   item: WarehouseItem;
@@ -34,7 +32,6 @@ const WarehouseItemRow: React.FC<WarehouseItemRowProps> = React.memo(({
   onEdit,
   onDelete
 }) => {
-  const { theme } = useThemeContext();
   const isLowStock = item.lowStockThreshold && item.quantity !== undefined && item.quantity <= item.lowStockThreshold;
 
   return (
