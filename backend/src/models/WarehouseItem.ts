@@ -5,6 +5,8 @@ export interface IWarehouseItem extends Document {
   quantity?: number;
   article?: string;
   price?: number;
+  category?: string;
+  lowStockThreshold?: number; // Порог для уведомления о низких остатках
   createdAt: Date;
   updatedAt: Date;
 }
@@ -27,6 +29,16 @@ const WarehouseItemSchema = new Schema<IWarehouseItem>({
     index: true, // Индекс для быстрого поиска по артикулу
   },
   price: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
+  category: {
+    type: String,
+    trim: true,
+    index: true, // Индекс для фильтрации по категориям
+  },
+  lowStockThreshold: {
     type: Number,
     default: 0,
     min: 0,

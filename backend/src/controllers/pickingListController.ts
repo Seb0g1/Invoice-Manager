@@ -8,6 +8,7 @@ import telegramService from '../services/telegramService';
 import googleSheetsService from '../services/googleSheetsService';
 import * as XLSX from 'xlsx';
 import mongoose from 'mongoose';
+import { format } from 'date-fns';
 
 export const getPickingLists = async (req: AuthRequest, res: Response) => {
   try {
@@ -136,22 +137,71 @@ export const createPickingListItem = async (req: AuthRequest, res: Response) => 
 
 export const importExcel = async (req: AuthRequest, res: Response) => {
   try {
-    const { pickingListId } = req.body;
+    const { pickingListId, mode } = req.body;
+    const importMode = mode || 'add'; // 'add', 'replace', 'remove', 'delete'
+
+    console.log(`[Import] Начало импорта. pickingListId: ${pickingListId}, mode: ${importMode}`);
+    console.log(`[Import] Файл получен: ${req.file ? 'да' : 'нет'}`);
 
     if (!req.file) {
       return res.status(400).json({ message: 'Файл Excel обязателен' });
+    }
+
+    if (!pickingListId) {
+      return res.status(400).json({ message: 'ID листа сборки обязателен' });
     }
 
     const pickingList = await PickingList.findById(pickingListId);
     if (!pickingList) {
       return res.status(404).json({ message: 'Лист сборки не найден' });
     }
+    
+    console.log(`[Import] Лист сборки найден: ${pickingList.name}`);
 
     // Читаем Excel файл
     const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
-    const data = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' });
+    const data: any[] = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+    
+    console.log(`[Import] Excel файл прочитан. Листов: ${workbook.SheetNames.length}, строк данных: ${data.length}`);
+    if (data.length > 0 && data.length <= 5) {
+      console.log(`[Import] Первые строки данных:`, data.slice(0, 3));
+    }
+    
+    // Функция для правильного парсинга числа из Excel
+    const parseNumber = (value: any, rowIndex?: number, columnName?: string): number | null => {
+      if (value === null || value === undefined || value === '') {
+        return null;
+      }
+      
+      if (typeof value === 'number') {
+        if (isNaN(value)) {
+          return null;
+        }
+        return value;
+      }
+      
+      if (value === null || value === undefined) {
+        return null;
+      }
+      let str = String(value).trim();
+      
+      if (str === '') {
+        return null;
+      }
+      
+      str = str.replace(/\s/g, '');
+      str = str.replace(',', '.');
+      str = str.replace(/[^\d.-]/g, '');
+      
+      if (str === '' || str === '-' || str === '.') {
+        return null;
+      }
+      
+      const num = parseFloat(str);
+      return isNaN(num) ? null : num;
+    };
 
     // Автоматическое определение колонок
     // Название всегда в столбце A (индекс 0)
@@ -284,9 +334,20 @@ export const importExcel = async (req: AuthRequest, res: Response) => {
     const existingItems = await PickingListItem.find({ pickingList: pickingList._id });
     const existingItemsMap = new Map<string, typeof existingItems[0]>();
     existingItems.forEach(item => {
-      const normalizedName = item.name.toLowerCase().trim();
-      existingItemsMap.set(normalizedName, item);
+      // Используем артикул как ключ, если он есть, иначе название
+      const key = item.article && item.article.length > 0
+        ? `article:${item.article.toLowerCase().trim()}`
+        : `name:${item.name.toLowerCase().trim()}`;
+      existingItemsMap.set(key, item);
+      
+      // Также добавляем по названию для обратной совместимости
+      const nameKey = `name:${item.name.toLowerCase().trim()}`;
+      if (!existingItemsMap.has(nameKey)) {
+        existingItemsMap.set(nameKey, item);
+      }
     });
+    
+    console.log(`[Import] Найдено существующих товаров: ${existingItems.length}`);
 
     // Словарь для группировки по названию (ключ: нормализованное название, значение: {originalName, article, quantity, price, supplierName})
     const itemsMap = new Map<string, { 
@@ -299,74 +360,133 @@ export const importExcel = async (req: AuthRequest, res: Response) => {
     
     let currentSupplier: string | null = null;
     
-    // Пропускаем заголовки (первую строку) и обрабатываем данные
-    for (let i = 1; i < data.length; i++) {
+    // Режим удаления по артикулу
+    if (importMode === 'delete') {
+      const articlesToDelete: string[] = [];
+      for (let i = 0; i < data.length; i++) {
+        const row = data[i] as any[];
+        if (!row || row.length === 0) continue;
+        
+        const name = String(row[nameCol] || '').trim();
+        const article = articleCol >= 0 ? String(row[articleCol] || '').trim() : '';
+        
+        // Пропускаем строку заголовка
+        const headerNames = ['наименование', 'название', 'name', 'товар', 'product', 'артикул', 'article'];
+        if (i === 0 && headerNames.includes(name.toLowerCase())) {
+          continue;
+        }
+        
+        if (!name || !article) continue;
+        
+        articlesToDelete.push(article);
+      }
+      
+      if (articlesToDelete.length === 0) {
+        return res.status(400).json({ message: 'Не найдено артикулов для удаления. Убедитесь, что в колонке C указаны артикулы.' });
+      }
+      
+      const result = await PickingListItem.deleteMany({ 
+        pickingList: pickingList._id,
+        article: { $in: articlesToDelete } 
+      });
+      
+      const populatedItems = await PickingListItem.find({ pickingList: pickingList._id })
+        .populate('supplier', 'name')
+        .sort({ createdAt: 1 });
+      
+      return res.json({
+        message: `Удалено товаров по артикулам: ${result.deletedCount} из ${articlesToDelete.length}`,
+        items: populatedItems,
+        stats: {
+          deleted: result.deletedCount,
+          requested: articlesToDelete.length
+        }
+      });
+    }
+    
+    // Пропускаем заголовки и обрабатываем данные для других режимов
+    for (let i = 0; i < data.length; i++) {
       const row = data[i] as any[];
       if (!row || row.length === 0) continue;
 
       const name = String(row[nameCol] || '').trim();
       const article = articleCol >= 0 ? String(row[articleCol] || '').trim() : '';
-      const quantity = quantityCol >= 0 ? (parseFloat(String(row[quantityCol] || '0')) || 0) : 0;
-      const price = priceCol >= 0 ? (parseFloat(String(row[priceCol] || '0')) || 0) : 0;
+      const quantityRaw = row[quantityCol];
+      const priceRaw = row[priceCol];
       const supplierName = supplierCol >= 0 ? String(row[supplierCol] || '').trim() : '';
 
-      // Логируем первые несколько товаров для отладки
-      if (i <= 3 && article) {
-        console.log(`[Import] Товар ${i}: название="${name}", артикул="${article}", кол-во=${quantity}, цена=${price}`);
+      // Пропускаем строки без названия
+      if (!name || name.length === 0) {
+        continue;
       }
-
-      if (!name) continue; // Пропускаем пустые строки
+      
+      // Пропускаем строку заголовка
+      const headerNames = ['наименование', 'название', 'name', 'товар', 'product', 'артикул', 'article', 'количество', 'кол-во', 'quantity', 'цена', 'price'];
+      const nameLower = name.toLowerCase();
+      if (i === 0 && headerNames.includes(nameLower)) {
+        continue;
+      }
+      
+      // Парсим количество и цену
+      const quantity = parseNumber(quantityRaw, i, 'количество');
+      const price = parseNumber(priceRaw, i, 'цена') || 0;
 
       // Определяем, является ли строка поставщиком
-      // Поставщик: есть название в A, но нет количества (B) и цены (C), и нет поставщика в D
-      const isSupplier = name && (!quantity || quantity === 0) && (!price || price === 0) && !supplierName;
+      const isSupplier = name && (quantity === null || quantity === 0) && (price === 0 || price === null) && !supplierName;
       
       if (isSupplier) {
-        // Это строка с поставщиком - сохраняем для следующих товаров
         currentSupplier = name;
         continue;
       }
 
-      // Это товар - проверяем наличие количества
-      if (!quantity || quantity <= 0) {
-        continue; // Пропускаем товары без количества
+      // Для режима remove можно пропускать строки без количества, для остальных - проверяем
+      if (quantity === null && importMode !== 'replace') {
+        continue;
       }
 
-      // Определяем поставщика: приоритет у колонки D, затем у currentSupplier
+      // Определяем поставщика
       const finalSupplierName = supplierName || currentSupplier || undefined;
 
-      const normalizedName = name.toLowerCase().trim();
-      const existingItem = itemsMap.get(normalizedName);
+      // Используем артикул как ключ, если он есть, иначе название
+      const key = article && article.length > 0 
+        ? `article:${article.toLowerCase()}` 
+        : `name:${name.toLowerCase()}`;
+      
+      const existingItem = itemsMap.get(key);
+      const quantityValue = quantity === null ? 0 : quantity;
       
       if (existingItem) {
-        // Если товар с таким названием уже есть в файле, обновляем количество (не суммируем)
-        existingItem.quantity = quantity;
-        // Обновляем цену, если она больше 0
+        if (importMode === 'add') {
+          existingItem.quantity += quantityValue;
+        } else if (importMode === 'replace') {
+          existingItem.quantity = Math.max(0, quantityValue);
+        } else if (importMode === 'remove') {
+          existingItem.quantity = Math.max(0, existingItem.quantity - Math.abs(quantityValue));
+        }
         if (price > 0) {
           existingItem.price = price;
         }
-        // Обновляем артикул, если он указан
-        if (article) {
+        if (article && article.length > 0) {
           existingItem.article = article;
         }
-        // Обновляем поставщика, если он указан
         if (finalSupplierName) {
           existingItem.supplierName = finalSupplierName;
         }
       } else {
-        // Создаем новый элемент
-        itemsMap.set(normalizedName, {
+        itemsMap.set(key, {
           originalName: name,
-          article: article || undefined,
-          quantity,
-          price: price || 0,
+          article: article && article.length > 0 ? article : undefined,
+          quantity: Math.max(0, quantityValue),
+          price: Math.max(0, price),
           supplierName: finalSupplierName,
         });
       }
     }
 
+    console.log(`[Import] Размер itemsMap после обработки: ${itemsMap.size}`);
     if (itemsMap.size === 0) {
-      return res.status(400).json({ message: 'Не найдено данных для импорта' });
+      console.log(`[Import] ОШИБКА: itemsMap пуст. Всего строк в Excel: ${data.length}`);
+      return res.status(400).json({ message: 'Не найдено данных для импорта. Убедитесь, что в файле есть товары с количеством.' });
     }
 
     // Получаем всех поставщиков для поиска по имени
@@ -381,8 +501,13 @@ export const importExcel = async (req: AuthRequest, res: Response) => {
     let suppliersCreatedCount = 0;
 
     // Обрабатываем товары: обновляем существующие или создаем новые
-    for (const [normalizedName, itemData] of itemsMap.entries()) {
-      const existingItem = existingItemsMap.get(normalizedName);
+    console.log(`[Import] Всего товаров для обработки: ${itemsMap.size}`);
+    for (const [key, itemData] of itemsMap.entries()) {
+      const existingItem = existingItemsMap.get(key);
+      
+      if (itemsMap.size <= 5) {
+        console.log(`[Import] Обработка товара: "${itemData.originalName}", ключ: ${key}, найден в БД: ${existingItem ? 'да' : 'нет'}`);
+      }
       
       // Находим или создаем поставщика по имени
       let supplierId: mongoose.Types.ObjectId | undefined = undefined;
@@ -414,36 +539,60 @@ export const importExcel = async (req: AuthRequest, res: Response) => {
       }
 
       if (existingItem) {
-        // Обновляем существующий товар - суммируем количество при повторном импорте
-        existingItem.quantity += itemData.quantity;
+        const oldQuantity = existingItem.quantity || 0;
+        
+        // Обновляем существующий товар в зависимости от режима
+        if (importMode === 'add') {
+          existingItem.quantity = oldQuantity + itemData.quantity;
+          updatedCount++;
+        } else if (importMode === 'replace') {
+          existingItem.quantity = Math.max(0, itemData.quantity);
+          updatedCount++;
+        } else if (importMode === 'remove') {
+          const removeAmount = Math.abs(itemData.quantity);
+          existingItem.quantity = Math.max(0, oldQuantity - removeAmount);
+          if (existingItem.quantity === 0) {
+            // Если количество стало 0, удаляем товар
+            await PickingListItem.findByIdAndDelete(existingItem._id);
+            updatedCount++;
+            continue;
+          } else {
+            updatedCount++;
+          }
+        }
+        
         // Обновляем цену, если она больше 0
         if (itemData.price > 0) {
           existingItem.price = itemData.price;
         }
-        // Обновляем артикул, если он указан
-        if (itemData.article) {
+        // Обновляем артикул, если он не был задан ранее
+        if (!existingItem.article && itemData.article) {
           existingItem.article = itemData.article;
         }
         // Обновляем поставщика, если он указан
         if (supplierId) {
           existingItem.supplier = supplierId;
         }
-        await existingItem.save();
-        updatedCount++;
+        
+        if (importMode !== 'remove' || existingItem.quantity > 0) {
+          await existingItem.save();
+        }
       } else {
-        // Создаем новый товар
-        const newItem = new PickingListItem({
-          pickingList: pickingList._id,
-          name: itemData.originalName,
-          article: itemData.article,
-          quantity: itemData.quantity,
-          price: itemData.price,
-          supplier: supplierId,
-          collected: false,
-          paid: false,
-        });
-        await newItem.save();
-        createdCount++;
+        // Создаем новый товар только если режим не 'remove'
+        if (importMode !== 'remove') {
+          const newItem = new PickingListItem({
+            pickingList: pickingList._id,
+            name: itemData.originalName,
+            article: itemData.article,
+            quantity: Math.max(0, itemData.quantity),
+            price: Math.max(0, itemData.price),
+            supplier: supplierId,
+            collected: false,
+            paid: false,
+          });
+          await newItem.save();
+          createdCount++;
+        }
       }
     }
 
@@ -461,9 +610,87 @@ export const importExcel = async (req: AuthRequest, res: Response) => {
         total: populatedItems.length
       }
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Import Excel error:', error);
-    res.status(500).json({ message: 'Ошибка при импорте Excel файла' });
+    console.error('Import Excel error stack:', error.stack);
+    const errorMessage = error.message || 'Ошибка при импорте Excel файла';
+    res.status(500).json({ message: errorMessage });
+  }
+};
+
+export const exportPickingList = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    
+    if (!id) {
+      return res.status(400).json({ message: 'ID листа сборки обязателен' });
+    }
+
+    const pickingList = await PickingList.findById(id);
+    if (!pickingList) {
+      return res.status(404).json({ message: 'Лист сборки не найден' });
+    }
+
+    // Получаем все товары листа сборки
+    const items = await PickingListItem.find({ pickingList: id })
+      .populate('supplier', 'name')
+      .sort({ createdAt: 1 })
+      .lean();
+
+    // Создаем Excel файл
+    const workbook = XLSX.utils.book_new();
+    
+    // Подготавливаем данные
+    const data = [
+      ['Наименование', 'Количество', 'Артикул', 'Цена', 'Поставщик', 'Собрано', 'Оплачено', 'Дата создания']
+    ];
+
+    items.forEach((item: any) => {
+      const supplierName = item.supplier && typeof item.supplier === 'object' 
+        ? item.supplier.name 
+        : item.supplier || '';
+      
+      data.push([
+        item.name || '',
+        item.quantity ?? 0,
+        item.article || '',
+        item.price ?? 0,
+        supplierName,
+        item.collected ? 'Да' : 'Нет',
+        item.paid ? 'Да' : 'Нет',
+        item.createdAt ? new Date(item.createdAt).toLocaleDateString('ru-RU') : ''
+      ]);
+    });
+
+    const worksheet = XLSX.utils.aoa_to_sheet(data);
+    
+    // Устанавливаем ширину колонок
+    worksheet['!cols'] = [
+      { wch: 30 }, // Наименование
+      { wch: 12 }, // Количество
+      { wch: 15 }, // Артикул
+      { wch: 12 }, // Цена
+      { wch: 20 }, // Поставщик
+      { wch: 10 }, // Собрано
+      { wch: 10 }, // Оплачено
+      { wch: 15 }  // Дата создания
+    ];
+
+    const sheetName = pickingList.name || `Лист сборки ${format(new Date(pickingList.date), 'dd.MM.yyyy')}`;
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Товары');
+
+    // Генерируем буфер
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+    // Устанавливаем заголовки для скачивания
+    const filename = `picking-list-${id}-${new Date().toISOString().split('T')[0]}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    
+    res.send(buffer);
+  } catch (error) {
+    console.error('Export picking list error:', error);
+    res.status(500).json({ message: 'Ошибка при экспорте листа сборки' });
   }
 };
 

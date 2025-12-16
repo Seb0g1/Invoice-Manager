@@ -93,6 +93,8 @@ export interface WarehouseItem {
   quantity?: number;
   article?: string;
   price?: number;
+  category?: string;
+  lowStockThreshold?: number;
   createdAt?: string;
   updatedAt?: string;
 }

@@ -24,7 +24,8 @@ import {
   Pagination,
   FormControl,
   Select,
-  MenuItem
+  MenuItem,
+  InputLabel
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -32,7 +33,9 @@ import {
   Delete as DeleteIcon,
   UploadFile as UploadFileIcon,
   Search as SearchIcon,
-  Clear as ClearIcon
+  Clear as ClearIcon,
+  FileDownload as FileDownloadIcon,
+  Warning as WarningIcon
 } from '@mui/icons-material';
 import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
@@ -52,20 +55,28 @@ import {
 } from '../hooks/useWarehouseItems';
 import { useDebounce } from '../utils/debounce';
 import { useQueryClient } from '@tanstack/react-query';
+import LowStockAlert from '../components/LowStockAlert';
 
 const Warehouse: React.FC = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [importMode, setImportMode] = useState<'add' | 'replace' | 'remove' | 'delete'>('add');
   const [editingItem, setEditingItem] = useState<WarehouseItem | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<string>('');
+  const [categories, setCategories] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(50);
+  const [exporting, setExporting] = useState(false);
+  
+  // Debounced search term
+  const debouncedSearchTerm = useDebounce(searchTerm, 300);
   
   // React Query hooks
   const queryClient = useQueryClient();
-  const { data, isLoading } = useWarehouseItems(page, itemsPerPage, searchTerm);
+  const { data, isLoading } = useWarehouseItems(page, itemsPerPage, debouncedSearchTerm, categoryFilter);
   const createMutation = useCreateWarehouseItem();
   const updateMutation = useUpdateWarehouseItem();
   const deleteMutation = useDeleteWarehouseItem();
@@ -75,6 +86,31 @@ const Warehouse: React.FC = () => {
   const totalPages = (data as any)?.pagination?.totalPages || 1;
   const totalItems = (data as any)?.pagination?.total || 0;
   const loading = isLoading;
+  
+  // Логируем данные для отладки
+  useEffect(() => {
+    if (items.length > 0) {
+      const testItem = items.find((item: any) => 
+        item.name === 'A.Dunhill Icon Racing Men 100 мл парфюмерная вода' || item.article === '35515'
+      );
+      if (testItem) {
+        console.log('[Frontend Warehouse] Товар найден в items:', {
+          name: testItem.name,
+          quantity: testItem.quantity,
+          quantityType: typeof testItem.quantity,
+          quantityValue: testItem.quantity,
+          article: testItem.article,
+          _id: testItem._id,
+          fullItem: JSON.stringify(testItem)
+        });
+        
+        // Проверяем, не умножается ли где-то
+        if (testItem.quantity === 10 && testItem.quantity !== 1) {
+          console.error('[Frontend Warehouse] ⚠️ ОШИБКА: Количество = 10, но должно быть 1!');
+        }
+      }
+    }
+  }, [items]);
   
   // React Hook Form для создания
   const {
@@ -88,7 +124,9 @@ const Warehouse: React.FC = () => {
       name: '',
       quantity: null,
       article: null,
-      price: null
+      price: null,
+      category: null,
+      lowStockThreshold: null
     }
   });
 
@@ -104,17 +142,31 @@ const Warehouse: React.FC = () => {
       name: '',
       quantity: null,
       article: null,
-      price: null
+      price: null,
+      category: null,
+      lowStockThreshold: null
     }
   });
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
+
+  // Загрузка категорий
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const response = await api.get('/warehouse/categories');
+        setCategories(response.data.categories || []);
+      } catch (error) {
+        console.error('Ошибка загрузки категорий:', error);
+      }
+    };
+    fetchCategories();
+  }, []);
   const { theme } = useThemeContext();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
   useEffect(() => {
-    setPage(1); // Сбрасываем на первую страницу при поиске
-  }, [debouncedSearchTerm]);
+    setPage(1); // Сбрасываем на первую страницу при поиске или изменении фильтра
+  }, [debouncedSearchTerm, categoryFilter]);
 
   const handleOpenDialog = () => {
     resetCreate();
@@ -131,11 +183,16 @@ const Warehouse: React.FC = () => {
       name: data.name,
       quantity: data.quantity ?? undefined,
       article: data.article ?? undefined,
-      price: data.price ?? undefined
+      price: data.price ?? undefined,
+      category: data.category ?? undefined,
+      lowStockThreshold: data.lowStockThreshold ?? undefined
     };
     
     await createMutation.mutateAsync(payload);
     handleCloseDialog();
+    // Обновляем список категорий после создания товара
+    const response = await api.get('/warehouse/categories');
+    setCategories(response.data.categories || []);
   };
 
   const handleEdit = (item: WarehouseItem) => {
@@ -144,7 +201,9 @@ const Warehouse: React.FC = () => {
       name: item.name,
       quantity: item.quantity ?? null,
       article: item.article ?? null,
-      price: item.price ?? null
+      price: item.price ?? null,
+      category: item.category ?? null,
+      lowStockThreshold: item.lowStockThreshold ?? null
     });
     setEditDialogOpen(true);
   };
@@ -162,11 +221,16 @@ const Warehouse: React.FC = () => {
       name: data.name,
       quantity: data.quantity ?? undefined,
       article: data.article ?? undefined,
-      price: data.price ?? undefined
+      price: data.price ?? undefined,
+      category: data.category ?? undefined,
+      lowStockThreshold: data.lowStockThreshold ?? undefined
     };
     
     await updateMutation.mutateAsync({ id: editingItem._id, data: payload });
     handleCloseEditDialog();
+    // Обновляем список категорий после обновления товара
+    const response = await api.get('/warehouse/categories');
+    setCategories(response.data.categories || []);
   };
 
   const handleDelete = async (id: string) => {
@@ -182,6 +246,27 @@ const Warehouse: React.FC = () => {
       setSelectedItems(filteredItems.map((item: WarehouseItem) => item._id));
     } else {
       setSelectedItems([]);
+    }
+  };
+
+  const handleSelectAllItems = async () => {
+    try {
+      // Получаем все ID товаров с учетом текущих фильтров
+      const params: any = {};
+      if (debouncedSearchTerm) {
+        params.search = debouncedSearchTerm;
+      }
+      if (categoryFilter) {
+        params.category = categoryFilter;
+      }
+
+      const response = await api.get('/warehouse/ids', { params });
+      const allIds = response.data.ids || [];
+      
+      setSelectedItems(allIds);
+      toast.success(`Выбрано товаров: ${allIds.length}`);
+    } catch (error) {
+      handleError(error, 'Ошибка при выборе всех товаров');
     }
   };
 
@@ -216,17 +301,20 @@ const Warehouse: React.FC = () => {
     try {
       const formData = new FormData();
       formData.append('excelFile', file);
+      formData.append('mode', importMode);
 
-      await api.post('/warehouse/import', formData, {
+      const response = await api.post('/warehouse/import', formData, {
         headers: {
           'Content-Type': 'multipart/form-data'
         }
       });
 
-      toast.success('Товары успешно импортированы');
+      const message = response.data.message || 'Операция завершена успешно';
+      toast.success(message);
       setImportDialogOpen(false);
-      // Инвалидируем кэш для обновления списка
-      queryClient.invalidateQueries({ queryKey: ['warehouseItems'] });
+      // Принудительно очищаем кэш и перезагружаем данные
+      queryClient.removeQueries({ queryKey: ['warehouseItems'] });
+      await queryClient.refetchQueries({ queryKey: ['warehouseItems'] });
     } catch (error) {
       handleError(error, 'Ошибка при импорте товаров');
     } finally {
@@ -236,11 +324,43 @@ const Warehouse: React.FC = () => {
     }
   };
 
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const params: any = {};
+      if (searchTerm) params.search = searchTerm;
+      if (categoryFilter) params.category = categoryFilter;
+      
+      const response = await api.get('/warehouse/export', {
+        params,
+        responseType: 'blob'
+      });
+
+      // Создаем ссылку для скачивания
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      const filename = `warehouse-export-${new Date().toISOString().split('T')[0]}.xlsx`;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      toast.success('Экспорт завершен успешно');
+    } catch (error) {
+      handleError(error, 'Ошибка при экспорте товаров');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   // Фильтрация теперь на сервере, но оставляем для обратной совместимости
   const filteredItems = items;
 
   return (
     <Box sx={{ p: { xs: 1.5, sm: 2, md: 3 } }}>
+      <LowStockAlert />
       <Box sx={{ 
         display: 'flex', 
         flexDirection: { xs: 'column', sm: 'row' },
@@ -276,32 +396,51 @@ const Warehouse: React.FC = () => {
         </Box>
       </Box>
 
-      <TextField
-        fullWidth
-        label="Поиск товара"
-        value={searchTerm}
-        onChange={(e) => setSearchTerm(e.target.value)}
-        sx={{ mb: 2 }}
-        size="small"
-        InputProps={{
-          startAdornment: (
-            <InputAdornment position="start">
-              <SearchIcon />
-            </InputAdornment>
-          ),
-          endAdornment: searchTerm && (
-            <InputAdornment position="end">
-              <IconButton onClick={() => setSearchTerm('')} edge="end" size="small">
-                <ClearIcon />
-              </IconButton>
-            </InputAdornment>
-          ),
-          style: { textTransform: 'none' }
-        }}
-        inputProps={{
-          style: { textTransform: 'none' }
-        }}
-      />
+      <Box sx={{ display: 'flex', gap: 2, mb: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
+        <TextField
+          fullWidth
+          label="Поиск товара"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          size="small"
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon />
+              </InputAdornment>
+            ),
+            endAdornment: searchTerm && (
+              <InputAdornment position="end">
+                <IconButton onClick={() => setSearchTerm('')} edge="end" size="small">
+                  <ClearIcon />
+                </IconButton>
+              </InputAdornment>
+            ),
+            style: { textTransform: 'none' }
+          }}
+          inputProps={{
+            style: { textTransform: 'none' }
+          }}
+        />
+        <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 200 } }}>
+          <InputLabel>Категория</InputLabel>
+          <Select
+            value={categoryFilter}
+            label="Категория"
+            onChange={(e) => {
+              setCategoryFilter(e.target.value);
+              setPage(1);
+            }}
+          >
+            <MenuItem value="">Все категории</MenuItem>
+            {categories.map((cat) => (
+              <MenuItem key={cat} value={cat}>
+                {cat}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      </Box>
 
       {selectedItems.length > 0 && (
         <Toolbar
@@ -321,6 +460,14 @@ const Warehouse: React.FC = () => {
           >
             Выбрано: {selectedItems.length}
           </Typography>
+          <Button
+            variant="outlined"
+            onClick={handleSelectAllItems}
+            size={isMobile ? "large" : "medium"}
+            sx={{ mr: 1 }}
+          >
+            Выбрать все
+          </Button>
           <Button
             variant="contained"
             color="error"
@@ -357,6 +504,7 @@ const Warehouse: React.FC = () => {
               <TableCell align="right">Кол-во</TableCell>
               <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>Артикул</TableCell>
               <TableCell align="right" sx={{ display: { xs: 'none', sm: 'table-cell' } }}>Цена</TableCell>
+              <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>Категория</TableCell>
               <TableCell align="center" sx={{ display: { xs: 'none', sm: 'table-cell' } }}>
                 Действия
               </TableCell>
@@ -368,7 +516,7 @@ const Warehouse: React.FC = () => {
               <>
                 {Array.from({ length: itemsPerPage }).map((_, index) => (
                   <TableRow key={index}>
-                    <TableCell colSpan={isMobile ? 4 : 6}>
+                    <TableCell colSpan={isMobile ? 4 : 7}>
                       <SkeletonLoader variant="text" rows={1} />
                     </TableCell>
                   </TableRow>
@@ -376,18 +524,30 @@ const Warehouse: React.FC = () => {
               </>
             ) : filteredItems.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={isMobile ? 4 : 6} align="center">
+                <TableCell colSpan={isMobile ? 4 : 7} align="center">
                   <Typography color="text.secondary">
                     Товары не найдены
                   </Typography>
                 </TableCell>
               </TableRow>
             ) : (
-              filteredItems.map((item: WarehouseItem) => (
-                <TableRow key={item._id} hover selected={selectedItems.includes(item._id)}>
+              filteredItems.map((item: WarehouseItem) => {
+                const isSelected = selectedItems.includes(item._id);
+                return (
+                <TableRow 
+                  key={item._id} 
+                  hover 
+                  selected={isSelected}
+                  sx={{
+                    backgroundColor: isSelected ? 'action.selected' : 'inherit',
+                    '&:hover': {
+                      backgroundColor: isSelected ? 'action.selected' : 'action.hover'
+                    }
+                  }}
+                >
                   <TableCell padding="checkbox">
                     <Checkbox
-                      checked={selectedItems.includes(item._id)}
+                      checked={isSelected}
                       onChange={() => handleSelectItem(item._id)}
                     />
                   </TableCell>
@@ -402,12 +562,38 @@ const Warehouse: React.FC = () => {
                             ? `${item.price.toLocaleString('ru-RU')} ₽`
                             : '-'
                           }
+                          {item.category && ` | Категория: ${item.category}`}
                         </Typography>
                       </Box>
                     )}
                   </TableCell>
                   <TableCell align="right">
-                    {item.quantity !== undefined ? item.quantity : '-'}
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.5 }}>
+                      {(() => {
+                        // Явно преобразуем в число для отображения
+                        let quantity: number | string = '-';
+                        if (item.quantity !== undefined && item.quantity !== null) {
+                          const numQuantity = typeof item.quantity === 'string' 
+                            ? parseFloat(item.quantity) 
+                            : Number(item.quantity);
+                          quantity = isNaN(numQuantity) ? 0 : numQuantity;
+                        }
+                        
+                        // ВАЖНО: Явно преобразуем в строку для отображения, чтобы избежать любых неявных преобразований
+                        // НЕ используем toLocaleString, так как это может добавить нули
+                        const displayValue = quantity === '-' ? '-' : String(quantity);
+                        
+                        // Используем Typography для явного отображения, чтобы избежать любых неявных преобразований
+                        return (
+                          <Typography component="span" variant="body2">
+                            {displayValue}
+                          </Typography>
+                        );
+                      })()}
+                      {item.lowStockThreshold !== undefined && item.lowStockThreshold !== null && item.lowStockThreshold !== 0 && item.quantity !== undefined && item.quantity <= item.lowStockThreshold && (
+                        <WarningIcon sx={{ fontSize: 16, color: 'warning.main' }} />
+                      )}
+                    </Box>
                   </TableCell>
                   <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>
                     {item.article || '-'}
@@ -417,6 +603,9 @@ const Warehouse: React.FC = () => {
                       ? `${item.price.toLocaleString('ru-RU')} ₽`
                       : '-'
                     }
+                  </TableCell>
+                  <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>
+                    {item.category || '-'}
                   </TableCell>
                   <TableCell align="center" sx={{ display: { xs: 'none', sm: 'table-cell' } }}>
                     <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
@@ -463,7 +652,8 @@ const Warehouse: React.FC = () => {
                     </Box>
                   </TableCell>
                 </TableRow>
-              ))
+                );
+              })
             )}
           </TableBody>
         </Table>
@@ -612,6 +802,54 @@ const Warehouse: React.FC = () => {
                 />
               )}
             />
+            <Controller
+              name="category"
+              control={createControl}
+              render={({ field }: { field: any }) => (
+                <TextField
+                  {...field}
+                  fullWidth
+                  label="Категория"
+                  margin="normal"
+                  value={field.value ?? ''}
+                  onChange={(e) => field.onChange(e.target.value || null)}
+                  error={!!createErrors.category}
+                  helperText={createErrors.category?.message}
+                  InputProps={{
+                    style: { textTransform: 'none' }
+                  }}
+                  inputProps={{
+                    style: { textTransform: 'none' }
+                  }}
+                />
+              )}
+            />
+            <Controller
+              name="lowStockThreshold"
+              control={createControl}
+              render={({ field }: { field: any }) => (
+                <TextField
+                  {...field}
+                  fullWidth
+                  label="Порог остатка (уведомление)"
+                  type="number"
+                  margin="normal"
+                  value={field.value ?? ''}
+                  onChange={(e) => {
+                    const value = e.target.value === '' ? null : parseFloat(e.target.value);
+                    field.onChange(value);
+                  }}
+                  error={!!createErrors.lowStockThreshold}
+                  helperText={createErrors.lowStockThreshold?.message || 'Уведомление при достижении этого количества'}
+                  InputProps={{
+                    style: { textTransform: 'none' }
+                  }}
+                  inputProps={{
+                    style: { textTransform: 'none' }
+                  }}
+                />
+              )}
+            />
           </DialogContent>
           <DialogActions>
             <Button onClick={handleCloseDialog} disabled={createMutation.isPending} size={isMobile ? "large" : "medium"}>
@@ -724,6 +962,54 @@ const Warehouse: React.FC = () => {
                 />
               )}
             />
+            <Controller
+              name="category"
+              control={editControl}
+              render={({ field }: { field: any }) => (
+                <TextField
+                  {...field}
+                  fullWidth
+                  label="Категория"
+                  margin="normal"
+                  value={field.value ?? ''}
+                  onChange={(e) => field.onChange(e.target.value || null)}
+                  error={!!editErrors.category}
+                  helperText={editErrors.category?.message}
+                  InputProps={{
+                    style: { textTransform: 'none' }
+                  }}
+                  inputProps={{
+                    style: { textTransform: 'none' }
+                  }}
+                />
+              )}
+            />
+            <Controller
+              name="lowStockThreshold"
+              control={editControl}
+              render={({ field }: { field: any }) => (
+                <TextField
+                  {...field}
+                  fullWidth
+                  label="Порог остатка (уведомление)"
+                  type="number"
+                  margin="normal"
+                  value={field.value ?? ''}
+                  onChange={(e) => {
+                    const value = e.target.value === '' ? null : parseFloat(e.target.value);
+                    field.onChange(value);
+                  }}
+                  error={!!editErrors.lowStockThreshold}
+                  helperText={editErrors.lowStockThreshold?.message || 'Уведомление при достижении этого количества'}
+                  InputProps={{
+                    style: { textTransform: 'none' }
+                  }}
+                  inputProps={{
+                    style: { textTransform: 'none' }
+                  }}
+                />
+              )}
+            />
           </DialogContent>
           <DialogActions>
             <Button onClick={handleCloseEditDialog} disabled={updateMutation.isPending} size={isMobile ? "large" : "medium"}>
@@ -744,9 +1030,27 @@ const Warehouse: React.FC = () => {
             Формат Excel файла:
             <br />A - Наименование
             <br />B - Кол-во
-            <br />C - Артикул
+            <br />C - Артикул (обязателен для режима "Удалить")
             <br />D - Цена
+            <br />
+            <br />
+            <strong>Режим "Удалить товары по артикулу":</strong>
+            <br />Удаляет товары, у которых артикул совпадает с артикулами из Excel.
+            <br />В этом режиме важна только колонка C (Артикул).
           </Typography>
+          <FormControl fullWidth sx={{ mb: 2 }}>
+            <InputLabel>Режим импорта</InputLabel>
+            <Select
+              value={importMode}
+              label="Режим импорта"
+              onChange={(e) => setImportMode(e.target.value as 'add' | 'replace' | 'remove' | 'delete')}
+            >
+              <MenuItem value="add">Добавить количество (суммировать)</MenuItem>
+              <MenuItem value="replace">Заменить количество</MenuItem>
+              <MenuItem value="remove">Уменьшить количество (удалить при 0)</MenuItem>
+              <MenuItem value="delete">Удалить товары по артикулу</MenuItem>
+            </Select>
+          </FormControl>
           <input
             type="file"
             accept=".xlsx,.xls"

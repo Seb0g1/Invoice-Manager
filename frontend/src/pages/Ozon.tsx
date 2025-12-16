@@ -255,13 +255,15 @@ const Ozon: React.FC = () => {
         const searchLower = searchTerm.toLowerCase();
         if (!product.name.toLowerCase().includes(searchLower) &&
             !product.offerId?.toLowerCase().includes(searchLower) &&
-            !product.sku.toString().includes(searchLower)) {
+            !(product.sku ? String(product.sku).toLowerCase().includes(searchLower) : false)) {
           return false;
         }
       }
       
       // Фильтр по наличию - используем полный остаток (present + reserved)
-      const totalStock = (product.stock.present || 0) + (product.stock.reserved || 0);
+      const totalStock = product.stock 
+        ? (product.stock.present || 0) + (product.stock.reserved || 0)
+        : 0;
       if (inStock === 'inStock' && totalStock === 0) {
         return false;
       }
@@ -295,8 +297,12 @@ const Ozon: React.FC = () => {
           break;
         case 'stock':
           // Сортируем по полному остатку (present + reserved)
-          const totalStockA = (a.stock.present || 0) + (a.stock.reserved || 0);
-          const totalStockB = (b.stock.present || 0) + (b.stock.reserved || 0);
+          const totalStockA = a.stock 
+            ? (a.stock.present || 0) + (a.stock.reserved || 0)
+            : 0;
+          const totalStockB = b.stock 
+            ? (b.stock.present || 0) + (b.stock.reserved || 0)
+            : 0;
           comparison = totalStockA - totalStockB;
           break;
         case 'sku':
@@ -634,23 +640,34 @@ const Ozon: React.FC = () => {
                         size="small"
                         color={product.status === 'active' ? 'success' : 'default'}
                       />
-                      <Chip
-                        label={`Остаток: ${(product.stock.present || 0) + (product.stock.reserved || 0)}`}
-                        size="small"
-                        color={(product.stock.present || 0) + (product.stock.reserved || 0) > 0 ? 'primary' : 'default'}
-                      />
-                      {(product.stock.present || 0) > 0 && (product.stock.reserved || 0) > 0 && (
+                      {product.stock && (
+                        <>
+                          <Chip
+                            label={`Остаток: ${(product.stock.present || 0) + (product.stock.reserved || 0)}`}
+                            size="small"
+                            color={(product.stock.present || 0) + (product.stock.reserved || 0) > 0 ? 'primary' : 'default'}
+                          />
+                          {(product.stock.present || 0) > 0 && (product.stock.reserved || 0) > 0 && (
+                            <Chip
+                              label={`В наличии: ${product.stock.present}, Зарезервировано: ${product.stock.reserved}`}
+                              size="small"
+                              color="info"
+                              sx={{ fontSize: '0.7rem' }}
+                            />
+                          )}
+                        </>
+                      )}
+                      {!product.stock && (
                         <Chip
-                          label={`В наличии: ${product.stock.present}, Зарезервировано: ${product.stock.reserved}`}
+                          label="Остаток: 0"
                           size="small"
-                          color="info"
-                          sx={{ fontSize: '0.7rem' }}
+                          color="default"
                         />
                       )}
                     </Box>
                     <Box sx={{ mt: 'auto', pt: 1 }}>
                       <Typography variant="body2" color="text.secondary" gutterBottom>
-                        SKU: {product.sku}
+                        SKU: {product.sku || '-'}
                       </Typography>
                       {product.offerId && (
                         <Typography variant="body2" color="text.secondary" gutterBottom>

@@ -100,7 +100,7 @@ const OzonPrices: React.FC = () => {
     return (
       product.name.toLowerCase().includes(searchLower) ||
       product.offerId.toLowerCase().includes(searchLower) ||
-      product.sku.toString().includes(searchLower)
+      (product.sku ? String(product.sku).toLowerCase().includes(searchLower) : false)
     );
   });
 

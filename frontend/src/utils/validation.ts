@@ -36,7 +36,23 @@ export const warehouseItemSchema = yup.object({
       return value;
     })
     .min(0, 'Цена не может быть отрицательной')
-    .max(10000000, 'Цена слишком большая')
+    .max(10000000, 'Цена слишком большая'),
+  category: yup
+    .string()
+    .nullable()
+    .max(100, 'Категория не должна превышать 100 символов')
+    .transform((value: any) => value || null),
+  lowStockThreshold: yup
+    .number()
+    .nullable()
+    .transform((value: any, originalValue: any) => {
+      if (originalValue === '' || originalValue === null || originalValue === undefined) {
+        return null;
+      }
+      return value;
+    })
+    .min(0, 'Порог остатка не может быть отрицательным')
+    .max(1000000, 'Порог остатка слишком большой')
 });
 
 export type WarehouseItemFormData = yup.InferType<typeof warehouseItemSchema>;

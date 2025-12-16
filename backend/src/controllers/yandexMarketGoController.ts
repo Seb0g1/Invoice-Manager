@@ -141,6 +141,35 @@ export const syncAllProducts = async (req: AuthRequest, res: Response) => {
               offerCardsMap = new Map();
             }
 
+            // Получаем изображения через отдельный запрос к offer-mappings
+            console.log(`[YandexMarketGo] Загрузка изображений для ${offerIds.length} товаров...`);
+            syncProgressState = {
+              current: totalSynced,
+              total: totalProducts,
+              stage: `${businessProgress} - Загрузка изображений...`,
+              status: 'processing',
+            };
+            
+            let imagesMap: Map<string, string[]>;
+            try {
+              imagesMap = await yandexMarketGoService.getOfferMappingsWithImages(
+                business.businessId,
+                offerIds,
+                (current, total, stage) => {
+                  syncProgressState = {
+                    current: totalSynced,
+                    total: totalProducts,
+                    stage: `${businessProgress} - ${stage}`,
+                    status: 'processing',
+                  };
+                }
+              );
+              console.log(`[YandexMarketGo] Загружено изображений для ${imagesMap.size} товаров`);
+            } catch (imagesError: any) {
+              console.warn(`[YandexMarketGo] Ошибка загрузки изображений: ${imagesError.message}, продолжаем без них`);
+              imagesMap = new Map();
+            }
+
             // Получаем остатки товаров
             console.log(`[YandexMarketGo] Загрузка остатков для ${offerIds.length} товаров...`);
             console.log(`[YandexMarketGo] Первые 10 offerIds:`, offerIds.slice(0, 10));
@@ -266,8 +295,49 @@ export const syncAllProducts = async (req: AuthRequest, res: Response) => {
             }
 
             // Определяем изображения
-            // В offerCard нет изображений напрямую, используем из offer если есть
-            const images = offer.pictures || [];
+            // Приоритет: imagesMap (отдельный запрос) > offer.pictures > offerCard.pictures > offerCard.photo/photos
+            let images: string[] = [];
+            
+            // 1. Из отдельного запроса к offer-mappings (самый надежный источник)
+            // normalizedOfferId уже объявлен выше
+            if (normalizedOfferId && imagesMap.has(normalizedOfferId)) {
+              images = imagesMap.get(normalizedOfferId) || [];
+            }
+            
+            // 2. Из offer-mappings (поле pictures в текущем ответе)
+            if (images.length === 0 && offer.pictures && Array.isArray(offer.pictures) && offer.pictures.length > 0) {
+              images = offer.pictures.filter((url: string) => url && url.trim().length > 0);
+            }
+            
+            // 3. Из offer-cards (поле pictures)
+            if (images.length === 0 && offerCard?.pictures && Array.isArray(offerCard.pictures) && offerCard.pictures.length > 0) {
+              images = offerCard.pictures.filter((url: string) => url && url.trim().length > 0);
+            }
+            
+            // 4. Из offer-cards (поле photo)
+            if (images.length === 0 && offerCard?.photo?.url) {
+              images = [offerCard.photo.url];
+            }
+            
+            // 5. Из offer-cards (поле photos - массив)
+            if (images.length === 0 && offerCard?.photos && Array.isArray(offerCard.photos) && offerCard.photos.length > 0) {
+              images = offerCard.photos
+                .map((photo: any) => photo.url || photo)
+                .filter((url: string) => url && url.trim().length > 0);
+            }
+            
+            // Логируем получение изображений для первых нескольких товаров
+            if (offersWithVendorCode <= 5) {
+              console.log(`[YandexMarketGo] Изображения для товара ${vendorCode}:`, {
+                fromImagesMap: imagesMap.has(normalizedOfferId || '') ? 1 : 0,
+                fromOffer: offer.pictures?.length || 0,
+                fromOfferCard: offerCard?.pictures?.length || 0,
+                fromPhoto: offerCard?.photo?.url ? 1 : 0,
+                fromPhotos: offerCard?.photos?.length || 0,
+                totalImages: images.length,
+                images: images.slice(0, 3), // Первые 3 изображения
+              });
+            }
 
             // Определяем категорию
             const category = offerCard?.mapping?.marketCategoryName || offer.category;
@@ -295,8 +365,12 @@ export const syncAllProducts = async (req: AuthRequest, res: Response) => {
                 product.name = productName;
               }
               if (offer.description) product.description = offer.description;
+              // Обновляем изображения если есть новые (даже если уже были старые)
               if (images.length > 0) {
                 product.images = images;
+              } else if (product.images.length === 0) {
+                // Если у товара нет изображений, оставляем пустым
+                product.images = [];
               }
               if (category) product.category = category;
               await product.save();

@@ -138,7 +138,7 @@ MONGO_URI=mongodb://localhost:27017/invoice-db
 
 #### С аутентификацией:
 ```env
-MONGO_URI=mongodb://invoice_user:ваш-пароль-для-приложения@localhost:27017/invoice-db?authSource=invoice-db
+MONGO_URI=mongodb://invoice_user:CGJ-Ge-90@localhost:27017/invoice-db?authSource=invoice-db
 ```
 
 ### Перезапуск приложения
@@ -162,7 +162,7 @@ sudo systemctl status mongod
 # Подключение к MongoDB
 mongosh
 # или с аутентификацией
-mongosh -u invoice_user -p ваш-пароль --authenticationDatabase invoice-db
+mongosh -u invoice_user -p CGJ-Ge-90 --authenticationDatabase invoice-db
 ```
 
 ### Полезные команды в MongoDB

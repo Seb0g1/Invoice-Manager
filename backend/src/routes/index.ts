@@ -98,6 +98,7 @@ router.delete('/users/:id', authMiddleware, roleMiddleware(['director']), usersC
 
 // Picking Lists routes
 router.get('/picking-lists', authMiddleware, pickingListController.getPickingLists);
+router.get('/picking-lists/:id/export', authMiddleware, pickingListController.exportPickingList);
 router.get('/picking-lists/:id', authMiddleware, pickingListController.getPickingListById);
 router.post('/picking-lists', authMiddleware, pickingListController.createPickingList);
 router.post('/picking-lists/import', authMiddleware, excelUpload.single('file'), pickingListController.importExcel);
@@ -107,13 +108,19 @@ router.delete('/picking-list-items/:id', authMiddleware, pickingListController.d
 router.delete('/picking-lists/:id', authMiddleware, pickingListController.deletePickingList);
 
 // Warehouse routes
+// ВАЖНО: Специфичные роуты должны быть ПЕРЕД роутами с параметрами (:id)
 router.get('/warehouse', authMiddleware, warehouseController.getWarehouseItems);
-router.get('/warehouse/:id', authMiddleware, warehouseController.getWarehouseItemById);
+router.get('/warehouse/ids', authMiddleware, warehouseController.getAllWarehouseItemIds);
+router.get('/warehouse/categories', authMiddleware, warehouseController.getCategories);
+router.get('/warehouse/low-stock', authMiddleware, warehouseController.getLowStockItems);
+router.get('/warehouse/export', authMiddleware, warehouseController.exportWarehouseItems);
+router.post('/warehouse/import', authMiddleware, excelUpload.single('excelFile'), warehouseController.importWarehouseItems);
 router.post('/warehouse', authMiddleware, warehouseController.createWarehouseItem);
+router.delete('/warehouse', authMiddleware, warehouseController.deleteWarehouseItems);
+// Роуты с параметрами должны быть в конце
+router.get('/warehouse/:id', authMiddleware, warehouseController.getWarehouseItemById);
 router.put('/warehouse/:id', authMiddleware, warehouseController.updateWarehouseItem);
 router.delete('/warehouse/:id', authMiddleware, warehouseController.deleteWarehouseItem);
-router.delete('/warehouse', authMiddleware, warehouseController.deleteWarehouseItems);
-router.post('/warehouse/import', authMiddleware, excelUpload.single('excelFile'), warehouseController.importWarehouseItems);
 
 // OZON routes
 router.get('/ozon/config', authMiddleware, roleMiddleware(['director']), ozonController.getOzonConfig);

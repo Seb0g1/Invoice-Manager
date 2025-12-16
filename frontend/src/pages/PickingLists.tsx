@@ -22,7 +22,10 @@ import {
   CircularProgress,
   useMediaQuery,
   InputAdornment,
-  Autocomplete
+  Autocomplete,
+  FormControl,
+  InputLabel,
+  Select
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -32,7 +35,8 @@ import {
   CheckCircle as CheckCircleIcon,
   Cancel as CancelIcon,
   Search as SearchIcon,
-  Clear as ClearIcon
+  Clear as ClearIcon,
+  FileDownload as FileDownloadIcon
 } from '@mui/icons-material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -67,6 +71,9 @@ const PickingLists: React.FC = () => {
   const [newListName, setNewListName] = useState<string>('');
   const [createGoogleSheet, setCreateGoogleSheet] = useState<boolean>(false);
   const [excelFile, setExcelFile] = useState<File | null>(null);
+  const [importMode, setImportMode] = useState<'add' | 'replace' | 'remove' | 'delete'>('add');
+  const [importing, setImporting] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [filterDate, setFilterDate] = useState<string>('');
   const [filterSupplier, setFilterSupplier] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -129,7 +136,7 @@ const PickingLists: React.FC = () => {
     }
   };
 
-  const handleCreateList = async () => {
+  const handleCreateList = async (shouldImport: boolean = false) => {
     try {
       if (createGoogleSheet && !newListName.trim()) {
         toast.error('Введите название для Google таблицы');
@@ -152,15 +159,55 @@ const PickingLists: React.FC = () => {
         }, 500);
       }
       
+      const createdList = response.data;
+      await fetchPickingLists();
+      setSelectedList(createdList);
+      
+      // Если выбран файл Excel и нужно импортировать, импортируем его сразу после создания листа
+      if (shouldImport && excelFile && createdList) {
+        setImporting(true);
+        try {
+          const formData = new FormData();
+          formData.append('file', excelFile);
+          formData.append('pickingListId', createdList._id);
+          formData.append('mode', importMode);
+
+          const importResponse = await api.post('/picking-lists/import', formData, {
+            headers: {
+              'Content-Type': 'multipart/form-data'
+            }
+          });
+
+          const message = importResponse.data.message || 'Операция завершена успешно';
+          toast.success(message);
+          setExcelFile(null);
+          await fetchItems(createdList._id);
+        } catch (error: any) {
+          console.error('Ошибка импорта Excel:', error);
+          const errorMessage = error.response?.data?.message || error.message || 'Ошибка при импорте Excel';
+          toast.error(errorMessage);
+          handleError(error, 'Ошибка при импорте Excel');
+        } finally {
+          setImporting(false);
+        }
+      }
+      
       setCreateDialogOpen(false);
       setNewListDate(new Date());
       setNewListName('');
       setCreateGoogleSheet(false);
-      await fetchPickingLists();
-      setSelectedList(response.data);
     } catch (error) {
       handleError(error, 'Ошибка при создании листа');
     }
+  };
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setExcelFile(file);
+    }
+    // Сброс input
+    e.target.value = '';
   };
 
   const handleImportExcel = async () => {
@@ -169,10 +216,21 @@ const PickingLists: React.FC = () => {
       return;
     }
 
+    console.log('[Frontend Import] Начало импорта:', {
+      fileName: excelFile.name,
+      fileSize: excelFile.size,
+      pickingListId: selectedList._id,
+      mode: importMode
+    });
+
+    setImporting(true);
     try {
       const formData = new FormData();
       formData.append('file', excelFile);
       formData.append('pickingListId', selectedList._id);
+      formData.append('mode', importMode);
+      
+      console.log('[Frontend Import] FormData создан, отправка запроса...');
 
       const response = await api.post('/picking-lists/import', formData, {
         headers: {
@@ -180,12 +238,50 @@ const PickingLists: React.FC = () => {
         }
       });
 
-      toast.success(response.data.message);
+      const message = response.data.message || 'Операция завершена успешно';
+      toast.success(message);
       setImportDialogOpen(false);
       setExcelFile(null);
       await fetchItems(selectedList._id);
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Ошибка импорта Excel:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Ошибка при импорте Excel';
+      toast.error(errorMessage);
       handleError(error, 'Ошибка при импорте Excel');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleExport = async () => {
+    if (!selectedList) {
+      toast.error('Выберите лист сборки');
+      return;
+    }
+
+    setExporting(true);
+    try {
+      const response = await api.get(`/picking-lists/${selectedList._id}/export`, {
+        responseType: 'blob'
+      });
+
+      // Создаем ссылку для скачивания
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      const listName = selectedList.name || format(new Date(selectedList.date), 'dd.MM.yyyy', { locale: ru });
+      const filename = `picking-list-${listName}-${new Date().toISOString().split('T')[0]}.xlsx`;
+      link.setAttribute('download', filename);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+
+      toast.success('Экспорт завершен успешно');
+    } catch (error) {
+      handleError(error, 'Ошибка при экспорте листа сборки');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -525,6 +621,25 @@ const PickingLists: React.FC = () => {
                     sx={{ minHeight: { xs: 36, sm: 'auto' } }}
                   >
                     Добавить товар
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    startIcon={<UploadFileIcon />}
+                    onClick={() => setImportDialogOpen(true)}
+                    size={isMobile ? "small" : "medium"}
+                    sx={{ minHeight: { xs: 36, sm: 'auto' } }}
+                  >
+                    Импорт Excel
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    startIcon={<FileDownloadIcon />}
+                    onClick={handleExport}
+                    disabled={exporting || items.length === 0}
+                    size={isMobile ? "small" : "medium"}
+                    sx={{ minHeight: { xs: 36, sm: 'auto' } }}
+                  >
+                    {exporting ? 'Экспорт...' : 'Экспорт Excel'}
                   </Button>
                   <Chip
                     label={`Собрано: ${collectedCount}/${totalCount}`}
@@ -882,18 +997,87 @@ const PickingLists: React.FC = () => {
               helperText="Это название будет использовано для Google таблицы"
             />
           )}
+          <Box sx={{ mt: 3, pt: 2, borderTop: 1, borderColor: 'divider' }}>
+            <Typography variant="subtitle2" sx={{ mb: 2 }}>
+              Импорт товаров из Excel
+            </Typography>
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleImport}
+              style={{ display: 'none' }}
+              id="excel-import-create-input"
+              disabled={importing}
+            />
+            <label htmlFor="excel-import-create-input">
+              <Button
+                variant="outlined"
+                component="span"
+                startIcon={<UploadFileIcon />}
+                fullWidth
+                size="large"
+                disabled={importing}
+                sx={{ minHeight: 44, mb: 2 }}
+              >
+                {importing ? 'Импорт...' : 'Выбрать Excel файл'}
+              </Button>
+            </label>
+            {excelFile && (
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Выбран файл: {excelFile.name}
+              </Typography>
+            )}
+            <FormControl fullWidth sx={{ mb: 2 }}>
+              <InputLabel>Режим импорта</InputLabel>
+              <Select
+                value={importMode}
+                label="Режим импорта"
+                onChange={(e) => setImportMode(e.target.value as 'add' | 'replace' | 'remove' | 'delete')}
+              >
+                <MenuItem value="add">Добавить количество (суммировать)</MenuItem>
+                <MenuItem value="replace">Заменить количество</MenuItem>
+                <MenuItem value="remove">Уменьшить количество (удалить при 0)</MenuItem>
+                <MenuItem value="delete">Удалить товары по артикулу</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => {
             setCreateDialogOpen(false);
             setNewListName('');
             setCreateGoogleSheet(false);
+            setExcelFile(null);
           }} size={isMobile ? "large" : "medium"}>
             Отмена
           </Button>
-          <Button onClick={handleCreateList} variant="contained" size={isMobile ? "large" : "medium"}>
-            Создать
-          </Button>
+          {excelFile ? (
+            <>
+              <Button 
+                onClick={() => handleCreateList(false)} 
+                variant="outlined" 
+                size={isMobile ? "large" : "medium"}
+              >
+                Создать
+              </Button>
+              <Button 
+                onClick={async () => {
+                  // Сначала создаем лист, затем импортируем
+                  await handleCreateList(true);
+                }} 
+                variant="contained" 
+                disabled={importing}
+                size={isMobile ? "large" : "medium"}
+                startIcon={importing ? <CircularProgress size={20} /> : <UploadFileIcon />}
+              >
+                {importing ? 'Импорт...' : 'Создать и импортировать'}
+              </Button>
+            </>
+          ) : (
+            <Button onClick={() => handleCreateList(false)} variant="contained" size={isMobile ? "large" : "medium"}>
+              Создать
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
 
@@ -905,29 +1089,79 @@ const PickingLists: React.FC = () => {
         fullWidth
         fullScreen={isMobile}
       >
-        <DialogTitle>Импорт из Excel</DialogTitle>
+        <DialogTitle>Импорт товаров из Excel</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Формат файла: столбец A - наименование, столбец B - артикул, столбец C - количество
+            Формат Excel файла:
+            <br />A - Наименование
+            <br />B - Кол-во
+            <br />C - Артикул (обязателен для режима "Удалить")
+            <br />D - Цена
+            <br />
+            <br />
+            <strong>Режим "Удалить товары по артикулу":</strong>
+            <br />Удаляет товары, у которых артикул совпадает с артикулами из Excel.
+            <br />В этом режиме важна только колонка C (Артикул).
           </Typography>
+          <FormControl fullWidth sx={{ mb: 2 }}>
+            <InputLabel>Режим импорта</InputLabel>
+            <Select
+              value={importMode}
+              label="Режим импорта"
+              onChange={(e) => setImportMode(e.target.value as 'add' | 'replace' | 'remove' | 'delete')}
+            >
+              <MenuItem value="add">Добавить количество (суммировать)</MenuItem>
+              <MenuItem value="replace">Заменить количество</MenuItem>
+              <MenuItem value="remove">Уменьшить количество (удалить при 0)</MenuItem>
+              <MenuItem value="delete">Удалить товары по артикулу</MenuItem>
+            </Select>
+          </FormControl>
           <input
             type="file"
             accept=".xlsx,.xls"
-            onChange={(e) => setExcelFile(e.target.files?.[0] || null)}
-            style={{ width: '100%', marginTop: 16 }}
+            onChange={handleImport}
+            style={{ display: 'none' }}
+            id="excel-import-input"
+            disabled={importing}
           />
+          <label htmlFor="excel-import-input">
+            <Button
+              variant="outlined"
+              component="span"
+              startIcon={<UploadFileIcon />}
+              fullWidth
+              size="large"
+              disabled={importing}
+              sx={{ minHeight: 44 }}
+            >
+              Выбрать Excel файл
+            </Button>
+          </label>
+          {excelFile && (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 2, mb: 1 }}>
+              Выбран файл: {excelFile.name}
+            </Typography>
+          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setImportDialogOpen(false)} size={isMobile ? "large" : "medium"}>
+          <Button 
+            onClick={() => {
+              setImportDialogOpen(false);
+              setExcelFile(null);
+            }} 
+            disabled={importing}
+            size={isMobile ? "large" : "medium"}
+          >
             Отмена
           </Button>
           <Button
             onClick={handleImportExcel}
             variant="contained"
-            disabled={!excelFile}
+            disabled={!excelFile || !selectedList || importing}
             size={isMobile ? "large" : "medium"}
+            startIcon={importing ? <CircularProgress size={20} /> : <UploadFileIcon />}
           >
-            Импортировать
+            {importing ? 'Импорт...' : 'Импортировать'}
           </Button>
         </DialogActions>
       </Dialog>

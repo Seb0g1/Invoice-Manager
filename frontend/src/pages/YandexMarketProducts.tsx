@@ -656,7 +656,7 @@ const YandexMarketProducts: React.FC = () => {
                           ) : (
                             <>
                               <Chip
-                                label={`Цена: ${business.price.toLocaleString('ru-RU')} ₽`}
+                                label={`Цена: ${business.price ? business.price.toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : '0'} ₽`}
                                 size="small"
                                 color="primary"
                               />
@@ -786,7 +786,7 @@ const YandexMarketProducts: React.FC = () => {
                           ) : (
                             <>
                               <Typography variant="body2" fontWeight="medium">
-                                {business.price.toLocaleString('ru-RU')} ₽
+                                {business.price ? business.price.toLocaleString('ru-RU', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) : '0'} ₽
                               </Typography>
                               {idx === 0 && (
                                 <IconButton

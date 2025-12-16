@@ -120,6 +120,17 @@ interface OfferCardDTO {
     value?: string;
     valueId?: number;
   }>;
+  pictures?: string[]; // Изображения товара
+  photo?: {
+    width?: number;
+    height?: number;
+    url?: string;
+  };
+  photos?: Array<{
+    width?: number;
+    height?: number;
+    url?: string;
+  }>;
 }
 
 interface OfferCardsResponse {
@@ -422,11 +433,16 @@ class YandexMarketGoService {
           
           // Если новый endpoint не работает, пробуем старые варианты
           console.warn(`[YandexMarketGo] Новый endpoint не работает, пробуем старые...`);
-          try {
-            response = await client.post<OfferMappingsResponse>(
-              `/v2/businesses/${businessId}/offer-mappings/search`,
-              requestBody
-            );
+            try {
+              // Используем search endpoint, который возвращает больше информации включая pictures
+              response = await client.post<OfferMappingsResponse>(
+                `/v2/businesses/${businessId}/offer-mappings/search`,
+                {
+                  ...requestBody,
+                  // Добавляем поля для получения изображений
+                  // В некоторых версиях API можно указать какие поля нужны
+                }
+              );
           } catch (searchError: any) {
             console.error(`[YandexMarketGo] Ошибка при запросе к /v2/businesses/${businessId}/offer-mappings/search:`, {
               status: searchError.response?.status,
@@ -481,9 +497,20 @@ class YandexMarketGoService {
           
           // Логируем полную структуру первого оффера
           if (isNewFormat && (response.data as CampaignOffersResponse).result?.offers?.length) {
-            console.log(`[YandexMarketGo] Полная структура первого оффера (новый формат):`, JSON.stringify((response.data as CampaignOffersResponse).result!.offers![0], null, 2));
+            const firstOffer = (response.data as CampaignOffersResponse).result!.offers![0];
+            console.log(`[YandexMarketGo] Полная структура первого оффера (новый формат):`, JSON.stringify(firstOffer, null, 2));
+            console.log(`[YandexMarketGo] Проверка изображений в новом формате:`, {
+              hasPictures: 'pictures' in firstOffer,
+              pictures: (firstOffer as any).pictures,
+            });
           } else if (isOldFormat && (response.data as OfferMappingsResponse).result?.offerMappings?.length) {
-            console.log(`[YandexMarketGo] Полная структура первого оффера (старый формат):`, JSON.stringify((response.data as OfferMappingsResponse).result!.offerMappings![0], null, 2));
+            const firstMapping = (response.data as OfferMappingsResponse).result!.offerMappings![0];
+            console.log(`[YandexMarketGo] Полная структура первого оффера (старый формат):`, JSON.stringify(firstMapping, null, 2));
+            console.log(`[YandexMarketGo] Проверка изображений в старом формате:`, {
+              hasPictures: !!firstMapping.pictures,
+              picturesCount: firstMapping.pictures?.length || 0,
+              pictures: firstMapping.pictures?.slice(0, 3),
+            });
           }
         }
 
@@ -744,6 +771,20 @@ class YandexMarketGoService {
             if (response.data.status === 'OK' && response.data.result?.offerCards) {
               response.data.result.offerCards.forEach((card: OfferCardDTO) => {
                 offerCardsMap.set(card.offerId, card);
+                // Логируем структуру первой карточки для отладки
+                if (offerCardsMap.size === 1) {
+                  console.log(`[YandexMarketGo] Структура первой offer-card:`, JSON.stringify({
+                    offerId: card.offerId,
+                    hasPictures: !!card.pictures,
+                    picturesCount: card.pictures?.length || 0,
+                    hasPhoto: !!card.photo,
+                    hasPhotos: !!card.photos,
+                    photosCount: card.photos?.length || 0,
+                    samplePictures: card.pictures?.slice(0, 2),
+                    samplePhoto: card.photo ? { url: card.photo.url, width: card.photo.width, height: card.photo.height } : null,
+                    samplePhotos: card.photos?.slice(0, 2).map((p: any) => ({ url: p.url, width: p.width, height: p.height })),
+                  }, null, 2));
+                }
               });
               onProgress?.(offerCardsMap.size, offerIds.length, `Загружено карточек: ${offerCardsMap.size}...`);
             }
@@ -770,6 +811,20 @@ class YandexMarketGoService {
           if (response.data.status === 'OK' && response.data.result?.offerCards) {
             response.data.result.offerCards.forEach((card: OfferCardDTO) => {
               offerCardsMap.set(card.offerId, card);
+              // Логируем структуру первой карточки для отладки
+              if (offerCardsMap.size === 1) {
+                console.log(`[YandexMarketGo] Структура первой offer-card (без offerIds):`, JSON.stringify({
+                  offerId: card.offerId,
+                  hasPictures: !!card.pictures,
+                  picturesCount: card.pictures?.length || 0,
+                  hasPhoto: !!card.photo,
+                  hasPhotos: !!card.photos,
+                  photosCount: card.photos?.length || 0,
+                  samplePictures: card.pictures?.slice(0, 2),
+                  samplePhoto: card.photo ? { url: card.photo.url, width: card.photo.width, height: card.photo.height } : null,
+                  samplePhotos: card.photos?.slice(0, 2).map(p => ({ url: p.url, width: p.width, height: p.height })),
+                }, null, 2));
+              }
             });
             onProgress?.(offerCardsMap.size, offerCardsMap.size, `Загружено карточек: ${offerCardsMap.size}...`);
 
@@ -794,6 +849,118 @@ class YandexMarketGoService {
     }
 
     return offerCardsMap;
+  }
+
+  /**
+   * Получить изображения товаров через offer-mappings endpoint
+   * Использует POST /v2/businesses/{businessId}/offer-mappings для получения полной информации включая pictures
+   */
+  async getOfferMappingsWithImages(
+    businessId: string,
+    offerIds: string[],
+    onProgress?: (current: number, total: number, stage: string) => void
+  ): Promise<Map<string, string[]>> {
+    const client = await this.getClient(businessId);
+    if (!client) {
+      throw new Error(`Бизнес ${businessId} не настроен`);
+    }
+
+    const imagesMap = new Map<string, string[]>();
+    const batchSize = 200; // Максимальный размер батча для API
+
+    onProgress?.(0, offerIds.length, 'Загрузка изображений...');
+
+    try {
+      // Обрабатываем offerIds батчами
+      for (let i = 0; i < offerIds.length; i += batchSize) {
+        const batch = offerIds.slice(i, i + batchSize);
+        
+        try {
+          // Используем search endpoint для получения полной информации о товарах включая pictures
+          // Пробуем разные варианты запроса
+          let response;
+          try {
+            // Вариант 1: POST /v2/businesses/{businessId}/offer-mappings/search с offerIds
+            response = await client.post<OfferMappingsResponse>(
+              `/v2/businesses/${businessId}/offer-mappings/search`,
+              {
+                offerIds: batch,
+                limit: batchSize,
+              }
+            );
+          } catch (searchError: any) {
+            // Вариант 2: POST /v2/businesses/{businessId}/offer-mappings с offerIds в body
+            try {
+              response = await client.post<OfferMappingsResponse>(
+                `/v2/businesses/${businessId}/offer-mappings`,
+                {
+                  offerIds: batch,
+                  limit: batchSize,
+                }
+              );
+            } catch (mappingsError: any) {
+              // Вариант 3: GET /v2/businesses/{businessId}/offer-mappings с offerIds в query
+              console.warn(`[YandexMarketGo] POST методы не работают, пробуем GET...`);
+              response = await client.get<OfferMappingsResponse>(
+                `/v2/businesses/${businessId}/offer-mappings`,
+                {
+                  params: {
+                    offerIds: batch.join(','),
+                    limit: batchSize,
+                  }
+                }
+              );
+            }
+          }
+
+          if (response.data.result?.offerMappings) {
+            const mappingsWithImages = response.data.result.offerMappings.filter(
+              (m: OfferMapping) => m.pictures && Array.isArray(m.pictures) && m.pictures.length > 0
+            );
+            
+            console.log(`[YandexMarketGo] Батч ${i}-${i + batchSize}: получено ${response.data.result.offerMappings.length} mappings, из них ${mappingsWithImages.length} с изображениями`);
+            
+            response.data.result.offerMappings.forEach((mapping: OfferMapping) => {
+              if (mapping.pictures && Array.isArray(mapping.pictures) && mapping.pictures.length > 0) {
+                const validPictures = mapping.pictures.filter((url: string) => url && url.trim().length > 0);
+                if (validPictures.length > 0) {
+                  imagesMap.set(mapping.offerId, validPictures);
+                }
+              }
+            });
+            
+            onProgress?.(imagesMap.size, offerIds.length, `Загружено изображений: ${imagesMap.size}...`);
+            
+            // Логируем для первого батча
+            if (i === 0 && response.data.result.offerMappings.length > 0) {
+              const firstMapping = response.data.result.offerMappings[0];
+              console.log(`[YandexMarketGo] Структура первого offer-mapping с изображениями:`, {
+                offerId: firstMapping.offerId,
+                hasPictures: !!firstMapping.pictures,
+                picturesCount: firstMapping.pictures?.length || 0,
+                pictures: firstMapping.pictures?.slice(0, 3),
+                allFields: Object.keys(firstMapping),
+              });
+            }
+          } else {
+            console.warn(`[YandexMarketGo] Батч ${i}-${i + batchSize}: нет offerMappings в ответе`);
+          }
+        } catch (error: any) {
+          console.warn(`[YandexMarketGo] Ошибка получения изображений для батча ${i}-${i + batchSize}:`, error.message);
+          // Продолжаем обработку следующих батчей
+        }
+
+        // Задержка между батчами
+        if (i + batchSize < offerIds.length) {
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+      }
+    } catch (error: any) {
+      console.error(`[YandexMarketGo] Ошибка получения изображений:`, error.message);
+    }
+
+    console.log(`[YandexMarketGo] Всего получено изображений для ${imagesMap.size} товаров из ${offerIds.length}`);
+    return imagesMap;
   }
 
   /**
