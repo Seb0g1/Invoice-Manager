@@ -274,7 +274,7 @@ const Warehouse: React.FC = () => {
       }
       
       if (allIds.length === 0) {
-        toast.info('Нет товаров для выбора');
+        toast('Нет товаров для выбора');
         return;
       }
       
