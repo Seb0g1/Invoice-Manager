@@ -56,7 +56,7 @@ git commit -m "Initial commit: David Warehouse - система управлен
 
 ```powershell
 # Замените YOUR_USERNAME на ваш GitHub username
-git remote add origin https://github.com/YOUR_USERNAME/david-warehouse.git
+git remote add origin https://github.com/Seb0g1/Invoice-Manager
 
 # Переименуйте ветку в main (если нужно)
 git branch -M main
