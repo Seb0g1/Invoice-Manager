@@ -1,0 +1,50 @@
+{
+  "name": "invoice-backend",
+  "version": "1.0.0",
+  "description": "Backend for invoice management system",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "nodemon --exec ts-node src/index.ts",
+    "build": "node --max-old-space-size=4096 node_modules/typescript/bin/tsc",
+    "start": "node dist/index.js",
+    "sync-ozon": "ts-node scripts/sync-ozon-products.ts",
+    "check-stocks": "ts-node scripts/check-stocks-in-db.ts",
+    "generate-yandex-client": "powershell -ExecutionPolicy Bypass -File scripts/generate-yandex-client.ps1",
+    "get-google-token": "ts-node scripts/get-google-refresh-token.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@types/node-cron": "^3.0.11",
+    "axios": "^1.13.2",
+    "bcrypt": "^5.1.1",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
+    "date-fns": "^2.30.0",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "google-auth-library": "^9.0.0",
+    "googleapis": "^126.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^7.6.3",
+    "multer": "^1.4.5-lts.1",
+    "node-cron": "^4.2.1",
+    "sharp": "^0.32.6",
+    "xlsx": "^0.18.5",
+    "exceljs": "^4.4.0"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "^5.0.2",
+    "@types/cookie-parser": "^1.4.6",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.5",
+    "@types/multer": "^1.4.11",
+    "@types/node": "^20.9.0",
+    "@types/xlsx": "^0.0.36",
+    "nodemon": "^3.0.1",
+    "ts-node": "^10.9.1",
+    "typescript": "^5.2.2"
+  }
+}
